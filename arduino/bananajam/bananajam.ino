@@ -1,6 +1,11 @@
 #include <Arduboy2.h>
+#include <ArduboyTones.h>
+#include <Tinyfont.h>
+
+#include "noise.h"
 
 Arduboy2 arduboy;
+ArduboyTones sound(arduboy.audio.enabled);
 
 // TODO:
 // * optimize variable types
@@ -26,7 +31,8 @@ int step = 0;
 float momentum = 0;
 int direction = 0; // -1 = left, 1 = right
 
-bool showStats = true;
+bool showStats = false;
+bool hasPlayedStopSound = true;
 
 // https://github.com/nicolausYes/easing-functions
 double easeInOutQuad(double t) {
@@ -34,7 +40,8 @@ double easeInOutQuad(double t) {
 }
 
 void setup() {
-  arduboy.boot();
+  arduboy.beginDoFirst();
+  arduboy.waitNoButtons();
   arduboy.setFrameRate(frameRate);
 }
 
@@ -78,43 +85,53 @@ void drawBanana(int bottomCoverage, int bottomRadius, int rotation, int x,
 }
 
 // TODO:
-// * extract consts
+// * extract consts, direction setting
 // * rate limit
 // * DRY momentum drop
-void handleInputs() {
+void handleInputs(float initialMomentum = .25, float momentumIncrement = 1.1) {
   arduboy.pollButtons();
 
   if (arduboy.pressed(LEFT_BUTTON)) {
-    if (momentum == 0) {
-      direction = -1;
-      step = leftwardStepIndex;
-    }
+    // if (!sound.playing()) {
+    //   sound.tones(MOVE_TONES);
+    // }
 
-    if (direction == 1) {
-      momentum -= .1;
+    if (momentum == 0.0) {
+      momentum = initialMomentum;
+      direction = -1;
+      step = leftwardStepIndex - stepsPerRock / 4;
+    } else if (direction == 1) {
+      momentum *= (momentumIncrement - 1);
     } else {
-      momentum += .1;
+      momentum *= momentumIncrement;
     }
   } else if (arduboy.pressed(RIGHT_BUTTON)) {
-    if (momentum == 0) {
-      direction = 1;
-      step = rightwardStepIndex;
-    }
+    // if (!sound.playing()) {
+    //   sound.tones(MOVE_TONES);
+    // }
 
-    if (direction == -1) {
-      momentum -= .1;
+    // TODO: fix initial rightward movement not matching leftward
+    if (momentum == 0.0) {
+      momentum = initialMomentum;
+      direction = 1;
+      step = rightwardStepIndex - stepsPerRock / 4;
+    } else if (direction == -1) {
+      momentum *= (momentumIncrement - 1);
     } else {
-      momentum += .1;
+      momentum *= momentumIncrement;
     }
   }
 
   if (arduboy.pressed(DOWN_BUTTON)) {
+    sound.tones(CROUCH_TONES);
     momentum /= 2;
   }
 
   if (arduboy.justPressed(A_BUTTON)) {
     showStats = !showStats;
   }
+
+  momentum = min(1.25, max(-.25, momentum));
 }
 
 inline int getX() { return (rotation / 360.0) * radius * 2 * M_PI; }
@@ -139,8 +156,13 @@ void loop() {
     rotation = momentum * (easedDeviation * rockingAmplitudeDegrees * 2 -
                            rockingAmplitudeDegrees);
   } else {
-    step = 0;
     direction = 0;
+  }
+
+  if ((linearDeviation == .5 && !sound.playing()) ||
+      momentum == 0 && !hasPlayedStopSound) {
+    sound.tones(CROUCH_TONES);
+    hasPlayedStopSound = true;
   }
 
   handleInputs();
@@ -151,7 +173,7 @@ void loop() {
     arduboy.setCursor(0, 0);
     arduboy.print(linearDeviation);
     arduboy.setCursor(30, 0);
-    arduboy.print(rotation);
+    arduboy.print(sound.playing());
     arduboy.setCursor(60, 0);
     arduboy.print(direction);
     arduboy.setCursor(90, 0);
