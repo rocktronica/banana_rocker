@@ -5,14 +5,19 @@ Arduboy2 arduboy;
 // TODO:
 // * optimize variable types
 // * deal w/ 1+ momentum
+// * sound effects
+// * count score
+// * fix buggy initial momentum from 0
 
 const int frameRate = 24;
 
 const int rockingAmplitudeDegrees = 90;
 const int rockingFrequencyMs = 1500;
+const float momentumDropPerStep = .0125;
 
 const int stepsPerRock = frameRate * (rockingFrequencyMs / 1000.0);
-const float momentumDropPerStep = .0125;
+const int leftwardStepIndex = stepsPerRock / 2;
+const int rightwardStepIndex = 0;
 
 int radius = 25;
 int coverage = 170;
@@ -23,8 +28,9 @@ int direction = 0; // -1 = left, 1 = right
 
 bool showStats = true;
 
-double easeInOutSine(double t) {
-  return 0.5 * (1 + sin(3.1415926 * (t - 0.5)));
+// https://github.com/nicolausYes/easing-functions
+double easeInOutQuad(double t) {
+  return t < 0.5 ? 2 * t * t : t * (4 - 2 * t) - 1;
 }
 
 void setup() {
@@ -71,21 +77,39 @@ void drawBanana(int bottomCoverage, int bottomRadius, int rotation, int x,
                  x + midDepth * cos(angle), y + midDepth * sin(angle));
 }
 
+// TODO:
+// * extract consts
+// * rate limit
+// * DRY momentum drop
 void handleInputs() {
   arduboy.pollButtons();
 
   if (arduboy.pressed(LEFT_BUTTON)) {
+    if (momentum == 0) {
+      direction = -1;
+      step = leftwardStepIndex;
+    }
+
     if (direction == 1) {
       momentum -= .1;
     } else {
       momentum += .1;
     }
   } else if (arduboy.pressed(RIGHT_BUTTON)) {
+    if (momentum == 0) {
+      direction = 1;
+      step = rightwardStepIndex;
+    }
+
     if (direction == -1) {
       momentum -= .1;
     } else {
       momentum += .1;
     }
+  }
+
+  if (arduboy.pressed(DOWN_BUTTON)) {
+    momentum /= 2;
   }
 
   if (arduboy.justPressed(A_BUTTON)) {
@@ -103,19 +127,14 @@ void loop() {
   float linearDeviation = 0;
   float easedDeviation = 0;
 
-  if (momentum > 0) {
+  if (momentum > 0 || rotation != 0) {
     step = (step + 1) % stepsPerRock;
     momentum = max(0, momentum - momentumDropPerStep);
 
     linearDeviation = abs((float(step) / stepsPerRock) - 1.0 / 2) * 2;
-    easedDeviation = easeInOutSine(linearDeviation);
+    easedDeviation = easeInOutQuad(linearDeviation);
 
-    if (linearDeviation == .5) {
-      direction = 0;
-    } else {
-      // TODO: fix this. it's not rights
-      direction = linearDeviation < .5 ? -1 : 1;
-    }
+    direction = step < leftwardStepIndex ? -1 : 1;
 
     rotation = momentum * (easedDeviation * rockingAmplitudeDegrees * 2 -
                            rockingAmplitudeDegrees);
