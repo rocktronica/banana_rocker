@@ -14,76 +14,42 @@ ArduboyTones sound(arduboy.audio.enabled);
 // * count score
 // * fix buggy initial momentum from 0
 
-const int frameRate = 1;
+const int frameRate = 30;
 
 const int rockingAmplitudeDegrees = 90;
-const int rockingFrequencyMs = 1500;
-const float momentumDrop = .025;
+const int rockingFrequencyMs = 1000;
+const float momentumDrop = .33;
+const float minMomentum = .05;
+float initialMomentum = .25;
+float momentumIncrement = 1.1;
 
-// TODO: what's the technical term for a side of the swing?
-// TODO: try stepsRemainingInRock
-const int stepsPerRock = 8; // (frameRate * (rockingFrequencyMs / 1000.0)) / 2;
+const int stepsPerRock = (frameRate * (rockingFrequencyMs / 1000.0)) / 2;
 
-enum Direction { IDLE, LEFT, RIGHT };
+enum Side { CENTER, LEFT, RIGHT };
 
 int radius = 25;
 int coverage = 170;
 int rotation = 0;
 int step = 0;
 float momentum = 0;
-Direction direction = Direction::IDLE;
+Side side = Side::CENTER;
 
 bool showStats = true;
-bool hasPlayedStopSound = true;
-
-// https://github.com/nicolausYes/easing-functions
-double easeInOutSine(double t) {
-  return 0.5 * (1 + sin(3.1415926 * (t - 0.5)));
-}
-double easeInOutQuad(double t) {
-  return t < 0.5 ? 2 * t * t : t * (4 - 2 * t) - 1;
-}
-double easeInOutCubic(double t) {
-  return t < 0.5 ? 4 * t * t * t : 1 + (--t) * (2 * (--t)) * (2 * t);
-}
-double easeInOutQuart(double t) {
-  if (t < 0.5) {
-    t *= t;
-    return 8 * t * t;
-  } else {
-    t = (--t) * t;
-    return 1 - 8 * t * t;
-  }
-}
-double easeInOutQuint(double t) {
-  double t2;
-  if (t < 0.5) {
-    t2 = t * t;
-    return 16 * t * t2 * t2;
-  } else {
-    t2 = (--t) * t;
-    return 1 + 16 * t * t2 * t2;
-  }
-}
-double easeInOutExpo(double t) {
-  if (t < 0.5) {
-    return (pow(2, 16 * t) - 1) / 510;
-  } else {
-    return 1 - 0.5 * pow(2, -16 * (t - 0.5));
-  }
-}
-double easeInOutCirc(double t) {
-  if (t < 0.5) {
-    return (1 - sqrt(1 - 2 * t)) * 0.5;
-  } else {
-    return (1 + sqrt(2 * t - 1)) * 0.5;
-  }
-}
 
 void setup() {
   arduboy.beginDoFirst();
   arduboy.waitNoButtons();
   arduboy.setFrameRate(frameRate);
+
+  for (int i = 0; i < 10; ++i) {
+    Serial.print("i:");
+    Serial.print(i);
+    Serial.print("\tlinear:");
+    Serial.print(getLinearDeviation(i, 10));
+    Serial.print("\teased:");
+    Serial.print(getEasedDeviation(i, 10));
+    Serial.println();
+  }
 }
 
 struct Xy {
@@ -126,36 +92,31 @@ void drawBanana(int bottomCoverage, int bottomRadius, int rotation, int x,
 }
 
 // TODO:
-// * extract consts, direction setting
+// * redo slowDown
+// * tidy, extract consts + side stuff
 // * rate limit
-// * DRY momentum drop
-void handleInputs(float initialMomentum = .5, float momentumIncrement = 1.1) {
+void handleInputs() {
   arduboy.pollButtons();
 
   if (arduboy.pressed(LEFT_BUTTON)) {
-    if (momentum == 0.0) {
+    if (momentum <= minMomentum) {
       momentum = initialMomentum;
-      direction = Direction::LEFT;
-      // } else {
-      //   momentum *= momentumIncrement;
+      side = Side::LEFT;
+    } else {
+      momentum *= momentumIncrement;
     }
   } else if (arduboy.pressed(RIGHT_BUTTON)) {
-    if (momentum == 0.0) {
+    if (momentum <= minMomentum) {
       momentum = initialMomentum;
-      direction = Direction::RIGHT;
-      // } else {
-      //   momentum *= momentumIncrement;
+      side = Side::RIGHT;
+    } else {
+      momentum *= momentumIncrement;
     }
   }
 
   if (arduboy.pressed(DOWN_BUTTON)) {
     sound.tones(CROUCH_TONES);
-    momentum /= 2;
-
-    if (momentum == 0) {
-      direction == Direction::IDLE;
-      step = 0;
-    }
+    slowDown();
   }
 
   if (arduboy.justPressed(A_BUTTON)) {
@@ -167,6 +128,27 @@ void handleInputs(float initialMomentum = .5, float momentumIncrement = 1.1) {
 
 inline int getX() { return (rotation / 360.0) * radius * 2 * M_PI; }
 
+const float getLinearDeviation(int i, int count) {
+  return 1 - abs((float(i) / count) - .5) * 2;
+}
+
+const float getEasedDeviation(float i, int count) {
+  // easeInSine from https://github.com/nicolausYes/easing-functions
+  return sin(1.5707963 * (1 - abs((float(i) / count) - .5) * 2));
+}
+
+// TODO: implement
+void scorePoint() { sound.tones(CROUCH_TONES); }
+
+void slowDown() {
+  momentum = momentum * (1.0 - momentumDrop);
+
+  if (momentum <= minMomentum) {
+    momentum = 0;
+    step = 0;
+  }
+}
+
 void loop() {
   if (!(arduboy.nextFrame())) {
     return;
@@ -175,60 +157,37 @@ void loop() {
   float linearDeviation = 0;
   float easedDeviation = 0;
 
-  // fix it getting stuck on last step twice
-  if (direction != Direction::IDLE && step < (stepsPerRock - 1) &&
-      momentum > 0) {
-    linearDeviation = float(step) / (stepsPerRock - 1);
-    // linearDeviation = abs((float(step) / (stepsPerRock - 1)) - 1.0 / 2) * 2;
+  linearDeviation = getLinearDeviation(step, stepsPerRock);
+  easedDeviation = getEasedDeviation(step, stepsPerRock);
 
-    // easedDeviation = easeInOutSine(linearDeviation); // naw
-    // easedDeviation = easeInOutQuad(linearDeviation); // eh
-    // easedDeviation = easeInOutCubic(linearDeviation); // disappears?
-
-    // TODO: get this looking at least linearly correct
-    // A big part of the problem is that the start and rest are the same,
-    // which looks like a pause when 2+ cycles are back to back
-    easedDeviation = linearDeviation;
-
-    // None of these are good
-    // easedDeviation = easeInOutQuart(linearDeviation);
-    // easedDeviation = easeInOutQuint(linearDeviation);
-    // easedDeviation = easeInOutExpo(linearDeviation);
-    // easedDeviation = easeInOutCirc(linearDeviation);
-
-    // Ugh, now how'd I break this one?
-    rotation = momentum * easedDeviation * rockingAmplitudeDegrees;
-
-    if (direction == Direction::LEFT) {
-      rotation = rotation - 90;
-      // rotation = -rotation;
-    } else if (direction == Direction::RIGHT) {
-      rotation = 90 - rotation;
-      // rotation = rotation;
-    }
-
-    step += 1;
-  } else {
-    step = 0;
-    momentum = max(0, momentum - .1);
-    rotation = 0;
-
-    if (momentum > 0) {
-      if (direction == Direction::LEFT) {
-        direction = Direction::RIGHT;
-      } else if (direction == Direction::RIGHT) {
-        direction = Direction::LEFT;
-      }
-    } else {
-      direction = Direction::IDLE;
-    }
+  rotation = momentum * easedDeviation * rockingAmplitudeDegrees;
+  if (side == Side::LEFT) {
+    rotation = -rotation;
   }
 
-  // if ((linearDeviation == .5 && !sound.playing()) ||
-  //     momentum == 0 && !hasPlayedStopSound) {
-  //   sound.tones(CROUCH_TONES);
-  //   hasPlayedStopSound = true;
-  // }
+  if (momentum > 0) {
+    step += 1;
+
+    // TODO: try slowDown more frequently
+
+    if (step == stepsPerRock) {
+      step = 0;
+      slowDown();
+
+      if (momentum > minMomentum) {
+        scorePoint();
+
+        if (side == Side::LEFT) {
+          side = Side::RIGHT;
+        } else if (side == Side::RIGHT) {
+          side = Side::LEFT;
+        }
+      }
+    }
+  } else {
+    side = Side::CENTER;
+    rotation = 0;
+  }
 
   handleInputs();
 
@@ -236,13 +195,15 @@ void loop() {
 
   if (showStats) {
     arduboy.setCursor(0, 0);
-    arduboy.print(float(momentum));
+    arduboy.print(step);
+    arduboy.setCursor(20, 0);
+    arduboy.print(side);
     arduboy.setCursor(30, 0);
-    arduboy.print(easedDeviation);
+    arduboy.print(float(momentum));
     arduboy.setCursor(60, 0);
-    arduboy.print(rockingAmplitudeDegrees);
+    arduboy.print(easedDeviation);
     arduboy.setCursor(90, 0);
-    arduboy.print(rotation);
+    arduboy.print(rockingAmplitudeDegrees);
   }
 
   drawBanana(coverage, radius, rotation, center.x + getX(), center.y);
