@@ -66,29 +66,6 @@ void setup() {
   arduboy.setFrameRate(frameRate);
 
   reset();
-
-  // for (int i = 0; i < stepsPerRock; ++i) {
-  //   Serial.print("i:");
-  //   Serial.print(i);
-  //   Serial.print("\tlinear:");
-  //   Serial.print(getLinearDeviation(Side::CENTER, i, stepsPerRock));
-  //   Serial.print("\teased:");
-  //   Serial.print(getEasedDeviation(Side::CENTER, i, stepsPerRock));
-  //   Serial.println();
-  // }
-
-  Serial.print("getWeight(LEFT, LEFT)\t");
-  Serial.print(getWeight(Side::LEFT, Side::LEFT, 10, 10));
-  Serial.println();
-  Serial.print("getWeight(LEFT, RIGHT)\t");
-  Serial.print(getWeight(Side::LEFT, Side::RIGHT, 10, 10));
-  Serial.println();
-  Serial.print("getWeight(RIGHT, LEFT)\t");
-  Serial.print(getWeight(Side::RIGHT, Side::LEFT, 10, 10));
-  Serial.println();
-  Serial.print("getWeight(RIGHT, RIGHT)\t");
-  Serial.print(getWeight(Side::RIGHT, Side::RIGHT, 10, 10));
-  Serial.println();
 }
 
 // TODO: fix weird bumps at right and bottom
@@ -219,38 +196,49 @@ void slowDown(float drop) {
 }
 
 void drawStats() {
-  tinyfont.setCursor(0, 5 * 0);
+  int line = 0;
+
+  tinyfont.setCursor(0, 5 * line);
+  tinyfont.print(F("SIDE:"));
+  tinyfont.setCursor(9 * 5 - 1, 5 * line);
+  tinyfont.print(side);
+  line += 1;
+
+  tinyfont.setCursor(0, 5 * line);
+  tinyfont.print(F("DIRECT:"));
+  tinyfont.setCursor(9 * 5 - 1, 5 * line);
+  tinyfont.print(direction);
+  line += 1;
+
+  tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("MOMENTUM:"));
-  tinyfont.setCursor(9 * 5 - 1, 5 * 0);
+  tinyfont.setCursor(9 * 5 - 1, 5 * line);
   tinyfont.print(float(momentum));
+  line += 1;
 
-  tinyfont.setCursor(0, 5 * 1);
+  tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("frmLEFT:"));
-  tinyfont.setCursor(9 * 5 - 1, 5 * 1);
+  tinyfont.setCursor(9 * 5 - 1, 5 * line);
   tinyfont.print(getLinearDeviation(Side::LEFT, side, step, stepsPerRock));
+  line += 1;
 
-  tinyfont.setCursor(0, 5 * 2);
+  tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("frmRIGHT:"));
-  tinyfont.setCursor(9 * 5 - 1, 5 * 2);
+  tinyfont.setCursor(9 * 5 - 1, 5 * line);
   tinyfont.print(getLinearDeviation(Side::RIGHT, side, step, stepsPerRock));
+  line += 1;
 
-  tinyfont.setCursor(0, 5 * 3);
+  tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("WEIGHT:"));
-  tinyfont.setCursor(9 * 5 - 1, 5 * 3);
+  tinyfont.setCursor(9 * 5 - 1, 5 * line);
   tinyfont.print(weight);
+  line += 1;
 }
 
 void update() {
-  float linearDeviation = 0;
-  float easedDeviation = 0;
-
-  linearDeviation = getLinearDeviation(Side::CENTER, side, step, stepsPerRock);
-  easedDeviation = getEasedDeviation(Side::CENTER, side, step, stepsPerRock);
-
-  rotation = momentum * easedDeviation * rockingAmplitudeDegrees;
-  if (side == Side::LEFT) {
-    rotation = -rotation;
-  }
+  rotation = momentum *
+             getEasedDeviation(Side::CENTER, side, step, stepsPerRock) *
+             rockingAmplitudeDegrees * ((side == Side::LEFT) ? -1 : 1);
 
   if (momentum > 0) {
     step += 1;
