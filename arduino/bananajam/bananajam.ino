@@ -20,33 +20,52 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // * try filling body white by keeping track of top/bottomYs
 
 const int frameRate = 30;
-
 const int rockingAmplitudeDegrees = 90;
 const int rockingFrequencyMs = 1000;
 const float momentumDropPerFrame = .05;
 const float minMomentum = .01;
-float initialMomentum = .1;
-float momentumIncrement = 1.1;
-
+const float initialMomentum = .1;
+const float momentumIncrement = 1.1;
 const int stepsPerRock = (frameRate * (rockingFrequencyMs / 1000.0)) / 2;
-
 enum Side { CENTER, LEFT, RIGHT };
 
-int radius = 25;
-int coverage = 170;
-int rotation = 0;
-int step = 0;
-float momentum = 0;
-float weight = 0;
-Side side = Side::CENTER;
-Side direction = Side::CENTER;
+int radius;
+int coverage;
+int rotation;
+int step;
+float momentum;
+float weight;
+Side side;
+Side direction;
+bool isTipping;
+bool showStats;
+int floorY;
 
-bool showStats = false;
+struct Xy {
+  int x = WIDTH / 2;
+  int y = HEIGHT / 2;
+} center;
+
+void reset() {
+  radius = 25;
+  coverage = 170;
+  rotation = 0;
+  step = 0;
+  momentum = 0;
+  weight = 0;
+  side = Side::CENTER;
+  direction = Side::CENTER;
+  isTipping = false;
+  showStats = false;
+  floorY = center.y + radius;
+}
 
 void setup() {
   arduboy.beginDoFirst();
   arduboy.waitNoButtons();
   arduboy.setFrameRate(frameRate);
+
+  reset();
 
   // for (int i = 0; i < stepsPerRock; ++i) {
   //   Serial.print("i:");
@@ -71,13 +90,6 @@ void setup() {
   Serial.print(getWeight(Side::RIGHT, Side::RIGHT, 10, 10));
   Serial.println();
 }
-
-struct Xy {
-  int x = WIDTH / 2;
-  int y = HEIGHT / 2;
-} center;
-
-const int floorY = center.y + radius;
 
 // TODO: fix weird bumps at right and bottom
 void drawSemiCircle(int startingAngle, int coverage, int radius, int x, int y) {
@@ -279,6 +291,10 @@ void loop() {
 
   update();
   handleInputs();
+
+  if (arduboy.justPressed(B_BUTTON)) {
+    reset();
+  }
 
   arduboy.clear();
 
