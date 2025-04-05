@@ -24,8 +24,8 @@ const int rockingAmplitudeDegrees = 90;
 const int rockingFrequencyMs = 1000;
 const float momentumDropPerFrame = .05;
 const float minMomentum = .01;
-float initialMomentum = .15;
-float momentumIncrement = 1.15;
+float initialMomentum = .1;
+float momentumIncrement = 1.1;
 
 const int stepsPerRock = (frameRate * (rockingFrequencyMs / 1000.0)) / 2;
 
@@ -40,7 +40,7 @@ float weight = 0;
 Side side = Side::CENTER;
 Side direction = Side::CENTER;
 
-bool showStats = true;
+bool showStats = false;
 
 void setup() {
   arduboy.beginDoFirst();
@@ -118,34 +118,21 @@ void drawBanana(int bottomCoverage, int bottomRadius, int rotation, int x,
 void handleInputs() {
   arduboy.pollButtons();
 
-  // weight response looks like .5 to 1
-  // which we want to map to .9 to 1
-
-  // these numbers feel good but don't make sense
-  // like, both sides peak at 1.1 when holding fixed direction. is that right?
-  // whatever the case, holding LEFT shouldn't work
-
   if (arduboy.pressed(LEFT_BUTTON)) {
     if (momentum <= minMomentum) {
       momentum = initialMomentum;
       side = Side::LEFT;
     } else {
-      weight =
-          ((getWeight(Side::LEFT, direction, step, stepsPerRock) - .5) * 2.0) *
-              .15 +
-          .85;
-      momentum *= momentumIncrement * weight;
+      weight = getWeight(Side::LEFT, direction, step, stepsPerRock);
+      momentum *= max(1, momentumIncrement * weight);
     }
   } else if (arduboy.pressed(RIGHT_BUTTON)) {
     if (momentum <= minMomentum) {
       momentum = initialMomentum;
       side = Side::RIGHT;
     } else {
-      weight =
-          ((getWeight(Side::RIGHT, direction, step, stepsPerRock) - .5) * 2.0) *
-              .15 +
-          .85;
-      momentum *= momentumIncrement * weight;
+      weight = getWeight(Side::RIGHT, direction, step, stepsPerRock);
+      momentum *= max(1, momentumIncrement * weight);
     }
   }
 
@@ -164,26 +151,23 @@ void handleInputs() {
 inline int getX() { return (rotation / 360.0) * radius * 2 * M_PI; }
 
 // TODO: with a fresh head, really figure out deviation math here
+// there always seems to be a weird stutter in there
 float getWeight(Side targetDirection, Side currentDirection, int i, int count) {
   if (currentDirection == RIGHT) {
     if (targetDirection == Side::RIGHT) {
-      // return 1;
-      return getLinearDeviation(Side::LEFT, Side::RIGHT, i, count);
+      return 1;
     } else if (targetDirection == Side::LEFT) {
-      // return .9;
-      return (1 - getLinearDeviation(Side::RIGHT, Side::RIGHT, i, count) * 1);
+      return 0;
     }
   } else if (currentDirection == LEFT) {
     if (targetDirection == Side::RIGHT) {
-      // return .9;
-      return (1 - getLinearDeviation(Side::RIGHT, Side::RIGHT, i, count) * 1);
+      return 0;
     } else if (targetDirection == Side::LEFT) {
-      // return 1;
-      return getLinearDeviation(Side::LEFT, Side::RIGHT, i, count);
+      return 1;
     }
   }
 
-  return .5;
+  return 1;
 }
 
 const float getLinearDeviation(Side fromSide, Side toSide, int i, int count) {
@@ -207,8 +191,10 @@ const float getEasedDeviation(Side fromSide, Side toSide, float i, int count) {
   return sin(1.5707963 * getLinearDeviation(fromSide, toSide, i, count));
 }
 
-// TODO: implement, require some new minimum momentum
-void scorePoint() { sound.tones(CROUCH_TONES); }
+// TODO: implement, require some new minimum momentum?
+void scorePoint() {
+  // sound.tones(CROUCH_TONES);
+}
 
 void slowDown(float drop) {
   momentum = momentum * (1.0 - drop);
