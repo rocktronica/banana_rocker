@@ -6,6 +6,7 @@
 
 Arduboy2 arduboy;
 ArduboyTones sound(arduboy.audio.enabled);
+Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 
 // TODO:
 // * optimize variable types
@@ -205,12 +206,29 @@ void slowDown(float drop) {
   }
 }
 
-// TODO: extract stuff
-void loop() {
-  if (!(arduboy.nextFrame())) {
-    return;
-  }
+void drawStats() {
+  tinyfont.setCursor(0, 5 * 0);
+  tinyfont.print(F("MOMENTUM:"));
+  tinyfont.setCursor(9 * 5 - 1, 5 * 0);
+  tinyfont.print(float(momentum));
 
+  tinyfont.setCursor(0, 5 * 1);
+  tinyfont.print(F("frmLEFT:"));
+  tinyfont.setCursor(9 * 5 - 1, 5 * 1);
+  tinyfont.print(getLinearDeviation(Side::LEFT, side, step, stepsPerRock));
+
+  tinyfont.setCursor(0, 5 * 2);
+  tinyfont.print(F("frmRIGHT:"));
+  tinyfont.setCursor(9 * 5 - 1, 5 * 2);
+  tinyfont.print(getLinearDeviation(Side::RIGHT, side, step, stepsPerRock));
+
+  tinyfont.setCursor(0, 5 * 3);
+  tinyfont.print(F("WEIGHT:"));
+  tinyfont.setCursor(9 * 5 - 1, 5 * 3);
+  tinyfont.print(weight);
+}
+
+void update() {
   float linearDeviation = 0;
   float easedDeviation = 0;
 
@@ -252,20 +270,20 @@ void loop() {
     direction = Side::CENTER;
     rotation = 0;
   }
+}
 
+void loop() {
+  if (!(arduboy.nextFrame())) {
+    return;
+  }
+
+  update();
   handleInputs();
 
   arduboy.clear();
 
   if (showStats) {
-    arduboy.setCursor(0, 0);
-    arduboy.print(float(momentum));
-    arduboy.setCursor(35, 0);
-    arduboy.print(getLinearDeviation(Side::LEFT, side, step, stepsPerRock));
-    arduboy.setCursor(70, 0);
-    arduboy.print(getLinearDeviation(Side::RIGHT, side, step, stepsPerRock));
-    arduboy.setCursor(105, 0);
-    arduboy.print(weight);
+    drawStats();
   }
 
   drawBanana(coverage, radius, rotation, center.x + getX(), center.y);
