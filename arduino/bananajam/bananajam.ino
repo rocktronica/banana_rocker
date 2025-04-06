@@ -21,6 +21,7 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 
 const int frameRate = 30;
 const int rockingAmplitudeDegrees = 90;
+const int tippingAmplitudeDegrees = rockingAmplitudeDegrees + 1;
 const int rockingFrequencyMs = 1000;
 const float momentumDropPerFrame = .05;
 const float minMomentum = .01;
@@ -38,7 +39,8 @@ float weight;
 Side side;
 Side direction;
 bool isTipping;
-bool showStats;
+bool showStats = false;
+float deviation;
 int floorY;
 
 struct Xy {
@@ -49,14 +51,15 @@ struct Xy {
 void reset() {
   radius = 25;
   coverage = 170;
-  rotation = 0;
-  step = 0;
-  momentum = 0;
-  weight = 0;
-  side = Side::CENTER;
-  direction = Side::CENTER;
+  rotation = -tippingAmplitudeDegrees;
+  step = stepsPerRock / 2;
+  momentum = 1.02;
+  weight = 1;
+  side = Side::LEFT;
+  direction = Side::LEFT;
   isTipping = false;
-  showStats = false;
+  // showStats = true;
+  deviation = 0;
   floorY = center.y + radius;
 }
 
@@ -134,11 +137,29 @@ void handleInputs() {
   if (arduboy.justPressed(A_BUTTON)) {
     showStats = !showStats;
   }
-
-  momentum = min(1, max(0, momentum));
 }
 
 inline int getX() { return (rotation / 360.0) * radius * 2 * M_PI; }
+
+Xy getPosition() {
+  Xy xy;
+
+  xy.x = center.x + getX();
+  xy.y = center.y;
+
+  if (isTipping) {
+    // TODO: DRY
+    if (direction == Side::RIGHT) {
+      xy.x += sin(radians(rotation)) * radius - radius;
+      xy.y -= cos(radians(90 - rotation)) * radius - radius - 1;
+    } else {
+      xy.x += sin(radians(rotation)) * radius + radius;
+      xy.y += cos(radians(90 - rotation)) * radius + radius + 1;
+    }
+  }
+
+  return xy;
+}
 
 // TODO: with a fresh head, really figure out deviation math here
 // there always seems to be a weird stutter in there
@@ -197,48 +218,92 @@ void slowDown(float drop) {
 
 void drawStats() {
   int line = 0;
+  int x = 10 * 5;
+
+  tinyfont.setCursor(0, 5 * line);
+  tinyfont.print(F("STEP:"));
+  tinyfont.setCursor(x, 5 * line);
+  tinyfont.print(step);
+  line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("SIDE:"));
-  tinyfont.setCursor(9 * 5 - 1, 5 * line);
+  tinyfont.setCursor(x, 5 * line);
   tinyfont.print(side);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("DIRECT:"));
-  tinyfont.setCursor(9 * 5 - 1, 5 * line);
+  tinyfont.print(F("DIRECTION:"));
+  tinyfont.setCursor(x, 5 * line);
   tinyfont.print(direction);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
+  tinyfont.print(F("ROTATION:"));
+  tinyfont.setCursor(x, 5 * line);
+  tinyfont.print(rotation);
+  line += 1;
+
+  tinyfont.setCursor(0, 5 * line);
+  tinyfont.print(F("DEVIATION:"));
+  tinyfont.setCursor(x, 5 * line);
+  tinyfont.print(deviation);
+  line += 1;
+
+  tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("MOMENTUM:"));
-  tinyfont.setCursor(9 * 5 - 1, 5 * line);
+  tinyfont.setCursor(x, 5 * line);
   tinyfont.print(float(momentum));
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("frmLEFT:"));
-  tinyfont.setCursor(9 * 5 - 1, 5 * line);
+  tinyfont.setCursor(x, 5 * line);
   tinyfont.print(getLinearDeviation(Side::LEFT, side, step, stepsPerRock));
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("frmRIGHT:"));
-  tinyfont.setCursor(9 * 5 - 1, 5 * line);
+  tinyfont.setCursor(x, 5 * line);
   tinyfont.print(getLinearDeviation(Side::RIGHT, side, step, stepsPerRock));
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("WEIGHT:"));
-  tinyfont.setCursor(9 * 5 - 1, 5 * line);
+  tinyfont.setCursor(x, 5 * line);
   tinyfont.print(weight);
   line += 1;
 }
 
+void updateRotation() {
+  deviation = getEasedDeviation(Side::CENTER, side, step, stepsPerRock);
+
+  if (isTipping) {
+    deviation = 1 + (1 - deviation); // 0 to 1 -> 1 to 2
+
+    // TODO: deal w/ initial tipping rotation so it doesn't jerk back
+    rotation = deviation * 90 * (side == Side::LEFT ? -1 : 1);
+  } else {
+    rotation = momentum * deviation * rockingAmplitudeDegrees *
+               (side == Side::LEFT ? -1 : 1);
+  }
+}
+
 void update() {
-  rotation = momentum *
-             getEasedDeviation(Side::CENTER, side, step, stepsPerRock) *
-             rockingAmplitudeDegrees * ((side == Side::LEFT) ? -1 : 1);
+  updateRotation();
+
+  if (isTipping || abs(rotation) >= tippingAmplitudeDegrees) {
+    isTipping = true;
+
+    // side = Side::RIGHT;
+    direction = side;
+
+    if (step < stepsPerRock) {
+      step += 1;
+    }
+
+    return;
+  }
 
   if (momentum > 0) {
     step += 1;
@@ -280,7 +345,11 @@ void loop() {
   update();
   handleInputs();
 
-  if (arduboy.justPressed(B_BUTTON)) {
+  if (arduboy.justPressed(LEFT_BUTTON)) {
+    step -= 1;
+  } else if (arduboy.justPressed(RIGHT_BUTTON)) {
+    step += 1;
+  } else if (arduboy.justPressed(B_BUTTON)) {
     reset();
   }
 
@@ -290,7 +359,8 @@ void loop() {
     drawStats();
   }
 
-  drawBanana(coverage, radius, rotation, center.x + getX(), center.y);
+  Xy position = getPosition();
+  drawBanana(coverage, radius, rotation, position.x, position.y);
   arduboy.drawFastHLine(0, floorY, WIDTH);
 
   arduboy.display();
