@@ -25,20 +25,22 @@ const int tippingAmplitudeDegrees = rockingAmplitudeDegrees + 1;
 const int rockingFrequencyMs = 1000;
 const float momentumDropPerFrame = .05;
 const float minMomentum = .01;
-const float initialMomentum = .1;
-const float momentumIncrement = 1.1;
+const float initialMomentum = 1.75;
+const float momentumIncrement = 1.5;
 const int stepsPerRock = (frameRate * (rockingFrequencyMs / 1000.0)) / 2;
 enum Side { CENTER, LEFT, RIGHT };
 
 int radius;
 int coverage;
 int rotation;
+int controlledRotation;
 int step;
 float momentum;
 float weight;
 Side side;
 Side direction;
 bool isTipping;
+bool isActive;
 bool showStats = false;
 float deviation;
 int floorY;
@@ -51,14 +53,16 @@ struct Xy {
 void reset() {
   radius = 25;
   coverage = 170;
-  rotation = -tippingAmplitudeDegrees;
-  step = stepsPerRock / 2;
-  momentum = 1.02;
+  rotation = 0;
+  controlledRotation = 0;
+  step = 0;
+  momentum = 0;
   weight = 1;
-  side = Side::LEFT;
-  direction = Side::LEFT;
+  side = Side::CENTER;
+  direction = Side::CENTER;
   isTipping = false;
-  // showStats = true;
+  isActive = true;
+  showStats = true;
   deviation = 0;
   floorY = center.y + radius;
 }
@@ -111,6 +115,18 @@ void drawBanana(int bottomCoverage, int bottomRadius, int rotation, int x,
 void handleInputs() {
   arduboy.pollButtons();
 
+  if (arduboy.justPressed(A_BUTTON)) {
+    showStats = !showStats;
+  }
+
+  if (arduboy.justPressed(B_BUTTON)) {
+    reset();
+  }
+
+  if (!isActive) {
+    return;
+  }
+
   if (arduboy.pressed(LEFT_BUTTON)) {
     if (momentum <= minMomentum) {
       momentum = initialMomentum;
@@ -133,18 +149,12 @@ void handleInputs() {
     sound.tones(CROUCH_TONES);
     slowDown(.5);
   }
-
-  if (arduboy.justPressed(A_BUTTON)) {
-    showStats = !showStats;
-  }
 }
-
-inline int getX() { return (rotation / 360.0) * radius * 2 * M_PI; }
 
 Xy getPosition() {
   Xy xy;
 
-  xy.x = center.x + getX();
+  xy.x = center.x + (rotation / 360.0) * radius * 2 * M_PI;
   xy.y = center.y;
 
   if (isTipping) {
@@ -239,9 +249,21 @@ void drawStats() {
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
+  tinyfont.print(F("TIPPING:"));
+  tinyfont.setCursor(x, 5 * line);
+  tinyfont.print(isTipping);
+  line += 1;
+
+  tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("ROTATION:"));
   tinyfont.setCursor(x, 5 * line);
   tinyfont.print(rotation);
+  line += 1;
+
+  tinyfont.setCursor(0, 5 * line);
+  tinyfont.print(F("ctrlROT:"));
+  tinyfont.setCursor(x, 5 * line);
+  tinyfont.print(controlledRotation);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
@@ -275,17 +297,36 @@ void drawStats() {
   line += 1;
 }
 
+// TODO:
+// * deal w/ initial tipping rotation so it doesn't jerk back
+//   during isTipping, change should only go one way but
+//   it bounces because deviation bounces off 0.
+//   and I wonder if it has something to do w/ current step "premature" normal
+//   rocking peak
+// * fix easing?
 void updateRotation() {
   deviation = getEasedDeviation(Side::CENTER, side, step, stepsPerRock);
 
   if (isTipping) {
-    deviation = 1 + (1 - deviation); // 0 to 1 -> 1 to 2
+    deviation = 1 - deviation; // 0 to 1 -> 1 to 2
 
-    // TODO: deal w/ initial tipping rotation so it doesn't jerk back
-    rotation = deviation * 90 * (side == Side::LEFT ? -1 : 1);
+    float change = deviation * (180 - abs(controlledRotation)) *
+                   (side == Side::LEFT ? -1 : 1);
+
+    if (isActive) {
+      Serial.print("DEV:");
+      Serial.print(deviation);
+      Serial.print(" CHA:");
+      Serial.print(change);
+      Serial.print(" STP:");
+      Serial.println(step);
+    }
+
+    rotation = controlledRotation + change;
   } else {
     rotation = momentum * deviation * rockingAmplitudeDegrees *
                (side == Side::LEFT ? -1 : 1);
+    controlledRotation = rotation;
   }
 }
 
@@ -293,13 +334,23 @@ void update() {
   updateRotation();
 
   if (isTipping || abs(rotation) >= tippingAmplitudeDegrees) {
-    isTipping = true;
+    // No matter where we are in the current rocking swing, if
+    // we're about to tip, reset current step to give the falling
+    // animation a regular half cycle to complete.
+    if (!isTipping) {
+      step = ceil(stepsPerRock / 2.0);
+    }
 
-    // side = Side::RIGHT;
+    isTipping = true;
     direction = side;
+
+    // maybe?
+    // updateRotation();
 
     if (step < stepsPerRock) {
       step += 1;
+    } else {
+      isActive = false;
     }
 
     return;
@@ -344,14 +395,6 @@ void loop() {
 
   update();
   handleInputs();
-
-  if (arduboy.justPressed(LEFT_BUTTON)) {
-    step -= 1;
-  } else if (arduboy.justPressed(RIGHT_BUTTON)) {
-    step += 1;
-  } else if (arduboy.justPressed(B_BUTTON)) {
-    reset();
-  }
 
   arduboy.clear();
 
