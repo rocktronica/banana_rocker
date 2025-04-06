@@ -32,6 +32,7 @@ const float momentumIncrement = 1.1;
 const int stepsPerRock = (frameRate * (rockingFrequencyMs / 1000.0)) / 2;
 const int scoreY = HEIGHT - 4;
 const int floorY = scoreY - 2;
+const int scoreIncrementMax = 10;
 
 enum Side { CENTER, LEFT, RIGHT, UP, DOWN };
 
@@ -151,6 +152,7 @@ void handleInputs() {
     if (arduboy.justPressed(A_BUTTON | B_BUTTON | RIGHT_BUTTON | LEFT_BUTTON |
                             DOWN_BUTTON | UP_BUTTON)) {
       reset();
+      scoreDisplayed = 0;
     }
 
     return;
@@ -265,7 +267,7 @@ const float getEasedDeviation(Side fromSide, Side toSide, float i, int count) {
 void scorePoint() {
   if (momentum >= minMomentumToScore) {
     sound.tones(SCORE);
-    score += 1;
+    score += momentum * scoreIncrementMax;
     scoreBest = max(score, scoreBest);
   }
 }
