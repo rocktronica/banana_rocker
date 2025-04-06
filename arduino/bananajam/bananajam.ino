@@ -9,6 +9,8 @@ ArduboyTones sound(arduboy.audio.enabled);
 Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 
 // TODO:
+// * title
+// * transition into new game after tip
 // * optimize variable types
 // * see about inlining math functions
 // * refine sound effects
@@ -28,6 +30,8 @@ const float minMomentumToScore = .1;
 const float initialMomentum = .1;
 const float momentumIncrement = 1.1;
 const int stepsPerRock = (frameRate * (rockingFrequencyMs / 1000.0)) / 2;
+const int scoreY = HEIGHT - 4;
+const int floorY = scoreY - 2;
 
 enum Side { CENTER, LEFT, RIGHT, UP, DOWN };
 
@@ -45,16 +49,15 @@ bool isTipping;
 bool isActive;
 bool showStats = false;
 float deviation;
-int floorY;
 int score;
 int scoreDisplayed = 0;
 int scoreBest = 0;
 int gamesPlayed = 0;
 
 struct Xy {
-  int x = WIDTH / 2;
-  int y = HEIGHT / 2;
-} center;
+  int x;
+  int y;
+};
 
 void reset() {
   radius = 25;
@@ -69,7 +72,6 @@ void reset() {
   isTipping = false;
   isActive = true;
   deviation = 0;
-  floorY = center.y + radius;
   score = 0;
 }
 
@@ -114,6 +116,7 @@ void drawBanana(int bottomCoverage, int bottomRadius, int rotation, int x,
                  x + midDepth * cos(angle), y + midDepth * sin(angle));
 }
 
+// TODO: wait until scoreDisplayed is done animating on subsequent games
 void startMomentum(Side _side) {
   score = 0;
   momentum = initialMomentum;
@@ -189,8 +192,8 @@ void handleInputs() {
 Xy getPosition() {
   Xy xy;
 
-  xy.x = center.x + (rotation / 360.0) * radius * 2 * M_PI;
-  xy.y = center.y;
+  xy.x = WIDTH / 2 + (rotation / 360.0) * radius * 2 * M_PI;
+  xy.y = floorY - radius;
 
   if (isTipping) {
     // TODO: DRY
@@ -348,15 +351,22 @@ void drawStats() {
 }
 
 void drawScore() {
-  tinyfont.setCursor(WIDTH - 5 * 5, 5 * 0);
+  int scoreBestDigits = 1;
+  if (scoreBest >= 100) {
+    scoreBestDigits = 3;
+  } else if (scoreBest >= 10) {
+    scoreBestDigits = 2;
+  }
+
+  tinyfont.setCursor(5 * 0, scoreY);
   tinyfont.print(F("SCORE"));
-  tinyfont.setCursor(WIDTH - 5 * 5, 5 * 1);
+  tinyfont.setCursor(5 * 5 + 1, scoreY);
   tinyfont.print(scoreDisplayed);
 
   if (gamesPlayed > 1 || score < scoreBest) {
-    tinyfont.setCursor(WIDTH - 5 * 5, 5 * 2);
+    tinyfont.setCursor(WIDTH - (5 * (4 + scoreBestDigits) + 1), scoreY);
     tinyfont.print(F("BEST"));
-    tinyfont.setCursor(WIDTH - 5 * 5, 5 * 3);
+    tinyfont.setCursor(WIDTH - (5 * scoreBestDigits) + 1, scoreY);
 
     // TODO: fix brief glimpse of score when new best is made
     tinyfont.print(score == scoreBest ? scoreDisplayed : scoreBest);
@@ -461,11 +471,11 @@ void loop() {
     drawStats();
   }
 
-  drawScore();
-
   Xy position = getPosition();
   drawBanana(coverage, radius, rotation, position.x, position.y);
+
   arduboy.drawFastHLine(0, floorY, WIDTH);
+  drawScore();
 
   arduboy.display();
 }
