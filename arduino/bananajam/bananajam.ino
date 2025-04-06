@@ -12,7 +12,7 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // * optimize variable types
 // * see about inlining math functions
 // * refine sound effects
-// * score -> detented progress bar. animate progress?
+// * levels?
 // * Display struct
 // * Banana struct w/ display, momentum, amplitude, frequency; ints > float math
 // * -> banana maker to find values, test difficulty
@@ -23,11 +23,13 @@ const int rockingAmplitudeDegrees = 90;
 const int tippingAmplitudeDegrees = rockingAmplitudeDegrees + 1;
 const int rockingFrequencyMs = 1000;
 const float momentumDropPerFrame = .05;
-const float minMomentum = .01;
+const float minMomentumToStart = .01;
+const float minMomentumToScore = .1;
 const float initialMomentum = .1;
 const float momentumIncrement = 1.1;
 const int stepsPerRock = (frameRate * (rockingFrequencyMs / 1000.0)) / 2;
-enum Side { CENTER, LEFT, RIGHT };
+
+enum Side { CENTER, LEFT, RIGHT, UP, DOWN };
 
 int radius;
 int coverage;
@@ -38,12 +40,16 @@ float momentum;
 float weight;
 Side side;
 Side direction;
+Side hold;
 bool isTipping;
 bool isActive;
 bool showStats = false;
 float deviation;
 int floorY;
 int score;
+int scoreDisplayed = 0;
+int scoreBest = 0;
+int gamesPlayed = 0;
 
 struct Xy {
   int x = WIDTH / 2;
@@ -62,7 +68,6 @@ void reset() {
   direction = Side::CENTER;
   isTipping = false;
   isActive = true;
-  // showStats = true;
   deviation = 0;
   floorY = center.y + radius;
   score = 0;
@@ -109,6 +114,13 @@ void drawBanana(int bottomCoverage, int bottomRadius, int rotation, int x,
                  x + midDepth * cos(angle), y + midDepth * sin(angle));
 }
 
+void startMomentum(Side _side) {
+  score = 0;
+  momentum = initialMomentum;
+  side = _side;
+  gamesPlayed += 1;
+}
+
 // TODO:
 // * redo slowDown
 // * tidy, extract consts + side stuff
@@ -116,42 +128,60 @@ void drawBanana(int bottomCoverage, int bottomRadius, int rotation, int x,
 void handleInputs() {
   arduboy.pollButtons();
 
+  if (arduboy.pressed(LEFT_BUTTON)) {
+    hold = Side::LEFT;
+  } else if (arduboy.pressed(RIGHT_BUTTON)) {
+    hold = Side::RIGHT;
+  } else if (arduboy.pressed(UP_BUTTON)) {
+    hold = Side::UP;
+  } else if (arduboy.pressed(DOWN_BUTTON)) {
+    hold = Side::DOWN;
+  } else {
+    hold = Side::CENTER;
+  }
+
   if (arduboy.justPressed(A_BUTTON)) {
     showStats = !showStats;
   }
 
-  if (arduboy.justPressed(B_BUTTON)) {
-    reset();
-  }
-
   if (!isActive) {
+    if (arduboy.justPressed(A_BUTTON | B_BUTTON | RIGHT_BUTTON | LEFT_BUTTON |
+                            DOWN_BUTTON | UP_BUTTON)) {
+      reset();
+    }
+
     return;
   }
 
-  if (arduboy.pressed(LEFT_BUTTON)) {
-    if (momentum <= minMomentum) {
-      momentum = initialMomentum;
-      side = Side::LEFT;
-    } else {
-      weight = getWeight(Side::LEFT, direction, step, stepsPerRock);
-      momentum *= max(1, momentumIncrement * weight);
-    }
-  } else if (arduboy.pressed(RIGHT_BUTTON)) {
-    if (momentum <= minMomentum) {
-      momentum = initialMomentum;
-      side = Side::RIGHT;
-    } else {
-      weight = getWeight(Side::RIGHT, direction, step, stepsPerRock);
-      momentum *= max(1, momentumIncrement * weight);
+  if (arduboy.anyPressed(RIGHT_BUTTON | LEFT_BUTTON)) {
+    if (arduboy.pressed(LEFT_BUTTON)) {
+      if (momentum <= minMomentumToStart) {
+        startMomentum(Side::LEFT);
+      } else {
+        weight = getWeight(Side::LEFT, direction, step, stepsPerRock);
+        momentum *= max(1, momentumIncrement * weight);
+      }
+    } else if (arduboy.pressed(RIGHT_BUTTON)) {
+      if (momentum <= minMomentumToStart) {
+        startMomentum(Side::RIGHT);
+      } else {
+        weight = getWeight(Side::RIGHT, direction, step, stepsPerRock);
+        momentum *= max(1, momentumIncrement * weight);
+      }
     }
   }
 
-  if (arduboy.pressed(DOWN_BUTTON)) {
-    sound.tones(CROUCH_TONES);
-    slowDown(momentumDropPerFrame * 4);
+  if (momentum > minMomentumToStart) {
+    if (arduboy.anyPressed(DOWN_BUTTON | UP_BUTTON)) {
+      if (arduboy.pressed(DOWN_BUTTON)) {
+        sound.tones(SLOW);
+      }
 
-    if (!isTipping) {
-      score = max(0, score - 1);
+      slowDown(momentumDropPerFrame * 4);
+
+      if (!isTipping) {
+        score = max(0, score - 1);
+      }
     }
   }
 }
@@ -171,6 +201,18 @@ Xy getPosition() {
       xy.x += sin(radians(rotation)) * radius + radius;
       xy.y += cos(radians(90 - rotation)) * radius + radius + 1;
     }
+  }
+
+  if (hold == Side::RIGHT) {
+    xy.x += 1;
+  } else if (hold == Side::LEFT) {
+    xy.x -= 1;
+  }
+
+  if (hold == Side::DOWN) {
+    xy.y += 1;
+  } else if (hold == Side::UP) {
+    xy.y -= 1;
   }
 
   return xy;
@@ -217,16 +259,18 @@ const float getEasedDeviation(Side fromSide, Side toSide, float i, int count) {
   return sin(1.5707963 * getLinearDeviation(fromSide, toSide, i, count));
 }
 
-// TODO: implement, require some new minimum momentum?
 void scorePoint() {
-  sound.tones(CROUCH_TONES);
-  score += 1;
+  if (momentum >= minMomentumToScore) {
+    sound.tones(SCORE);
+    score += 1;
+    scoreBest = max(score, scoreBest);
+  }
 }
 
 void slowDown(float drop) {
   momentum = momentum * (1.0 - drop);
 
-  if (momentum <= minMomentum) {
+  if (momentum <= minMomentumToStart) {
     momentum = 0;
     step = 0;
   }
@@ -235,6 +279,12 @@ void slowDown(float drop) {
 void drawStats() {
   int line = 0;
   int x = 10 * 5;
+
+  tinyfont.setCursor(0, 5 * line);
+  tinyfont.print(F("GAMES:"));
+  tinyfont.setCursor(x, 5 * line);
+  tinyfont.print(gamesPlayed);
+  line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("STEP:"));
@@ -285,15 +335,9 @@ void drawStats() {
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("frmLEFT:"));
+  tinyfont.print(F("HOLD:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(getLinearDeviation(Side::LEFT, side, step, stepsPerRock));
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("frmRIGHT:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(getLinearDeviation(Side::RIGHT, side, step, stepsPerRock));
+  tinyfont.print(hold);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
@@ -304,10 +348,19 @@ void drawStats() {
 }
 
 void drawScore() {
-  tinyfont.setCursor(WIDTH - 5 * 5, 0);
+  tinyfont.setCursor(WIDTH - 5 * 5, 5 * 0);
   tinyfont.print(F("SCORE"));
-  arduboy.setCursor(WIDTH - 5 * 5, 0 + 5 * 1);
-  arduboy.print(score);
+  tinyfont.setCursor(WIDTH - 5 * 5, 5 * 1);
+  tinyfont.print(scoreDisplayed);
+
+  if (gamesPlayed > 1 || score < scoreBest) {
+    tinyfont.setCursor(WIDTH - 5 * 5, 5 * 2);
+    tinyfont.print(F("BEST"));
+    tinyfont.setCursor(WIDTH - 5 * 5, 5 * 3);
+
+    // TODO: fix brief glimpse of score when new best is made
+    tinyfont.print(score == scoreBest ? scoreDisplayed : scoreBest);
+  }
 }
 
 void updateRotation() {
@@ -328,14 +381,18 @@ void updateRotation() {
 void update() {
   updateRotation();
 
+  if (score > scoreDisplayed) {
+    scoreDisplayed += 1;
+  } else if (score < scoreDisplayed) {
+    scoreDisplayed -= 1;
+  }
+
   if (isTipping || abs(rotation) >= tippingAmplitudeDegrees) {
     if (!isTipping) {
       // No matter where we are in the current rocking swing, if
       // we're about to tip, reset current step to give the falling
       // animation a regular half cycle to complete.
       step = ceil(stepsPerRock / 2.0);
-
-      sound.tones(CHANGE_TONES);
     }
 
     isTipping = true;
@@ -344,6 +401,14 @@ void update() {
     if (step < stepsPerRock) {
       step += 1;
     } else {
+      if (isActive) {
+        sound.tones(BUMP);
+      }
+
+      if (isActive) {
+        gamesPlayed += 1;
+      }
+
       isActive = false;
     }
 
@@ -365,7 +430,7 @@ void update() {
     if (step == stepsPerRock) {
       step = 0;
 
-      if (momentum > minMomentum) {
+      if (momentum > minMomentumToStart) {
         scorePoint();
 
         if (side == Side::LEFT) {
