@@ -11,9 +11,8 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // TODO:
 // * optimize variable types
 // * see about inlining math functions
-// * deal w/ 1+ momentum
-// * sound effects
-// * count score -> detented progress bar. animate progress?
+// * refine sound effects
+// * score -> detented progress bar. animate progress?
 // * Display struct
 // * Banana struct w/ display, momentum, amplitude, frequency; ints > float math
 // * -> banana maker to find values, test difficulty
@@ -25,8 +24,8 @@ const int tippingAmplitudeDegrees = rockingAmplitudeDegrees + 1;
 const int rockingFrequencyMs = 1000;
 const float momentumDropPerFrame = .05;
 const float minMomentum = .01;
-const float initialMomentum = 1.75;
-const float momentumIncrement = 1.5;
+const float initialMomentum = .1;
+const float momentumIncrement = 1.1;
 const int stepsPerRock = (frameRate * (rockingFrequencyMs / 1000.0)) / 2;
 enum Side { CENTER, LEFT, RIGHT };
 
@@ -44,6 +43,7 @@ bool isActive;
 bool showStats = false;
 float deviation;
 int floorY;
+int score;
 
 struct Xy {
   int x = WIDTH / 2;
@@ -62,9 +62,10 @@ void reset() {
   direction = Side::CENTER;
   isTipping = false;
   isActive = true;
-  showStats = true;
+  // showStats = true;
   deviation = 0;
   floorY = center.y + radius;
+  score = 0;
 }
 
 void setup() {
@@ -147,7 +148,11 @@ void handleInputs() {
 
   if (arduboy.pressed(DOWN_BUTTON)) {
     sound.tones(CROUCH_TONES);
-    slowDown(.5);
+    slowDown(momentumDropPerFrame * 4);
+
+    if (!isTipping) {
+      score = max(0, score - 1);
+    }
   }
 }
 
@@ -214,7 +219,8 @@ const float getEasedDeviation(Side fromSide, Side toSide, float i, int count) {
 
 // TODO: implement, require some new minimum momentum?
 void scorePoint() {
-  // sound.tones(CROUCH_TONES);
+  sound.tones(CROUCH_TONES);
+  score += 1;
 }
 
 void slowDown(float drop) {
@@ -297,32 +303,21 @@ void drawStats() {
   line += 1;
 }
 
-// TODO:
-// * deal w/ initial tipping rotation so it doesn't jerk back
-//   during isTipping, change should only go one way but
-//   it bounces because deviation bounces off 0.
-//   and I wonder if it has something to do w/ current step "premature" normal
-//   rocking peak
-// * fix easing?
+void drawScore() {
+  tinyfont.setCursor(WIDTH - 5 * 5, 0);
+  tinyfont.print(F("SCORE"));
+  arduboy.setCursor(WIDTH - 5 * 5, 0 + 5 * 1);
+  arduboy.print(score);
+}
+
 void updateRotation() {
   deviation = getEasedDeviation(Side::CENTER, side, step, stepsPerRock);
 
   if (isTipping) {
     deviation = 1 - deviation; // 0 to 1 -> 1 to 2
-
-    float change = deviation * (180 - abs(controlledRotation)) *
-                   (side == Side::LEFT ? -1 : 1);
-
-    if (isActive) {
-      Serial.print("DEV:");
-      Serial.print(deviation);
-      Serial.print(" CHA:");
-      Serial.print(change);
-      Serial.print(" STP:");
-      Serial.println(step);
-    }
-
-    rotation = controlledRotation + change;
+    rotation = controlledRotation + deviation *
+                                        (180 - abs(controlledRotation)) *
+                                        (side == Side::LEFT ? -1 : 1);
   } else {
     rotation = momentum * deviation * rockingAmplitudeDegrees *
                (side == Side::LEFT ? -1 : 1);
@@ -334,18 +329,17 @@ void update() {
   updateRotation();
 
   if (isTipping || abs(rotation) >= tippingAmplitudeDegrees) {
-    // No matter where we are in the current rocking swing, if
-    // we're about to tip, reset current step to give the falling
-    // animation a regular half cycle to complete.
     if (!isTipping) {
+      // No matter where we are in the current rocking swing, if
+      // we're about to tip, reset current step to give the falling
+      // animation a regular half cycle to complete.
       step = ceil(stepsPerRock / 2.0);
+
+      sound.tones(CHANGE_TONES);
     }
 
     isTipping = true;
     direction = side;
-
-    // maybe?
-    // updateRotation();
 
     if (step < stepsPerRock) {
       step += 1;
@@ -401,6 +395,8 @@ void loop() {
   if (showStats) {
     drawStats();
   }
+
+  drawScore();
 
   Xy position = getPosition();
   drawBanana(coverage, radius, rotation, position.x, position.y);
