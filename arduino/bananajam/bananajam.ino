@@ -117,7 +117,6 @@ void drawBanana(int bottomCoverage, int bottomRadius, int rotation, int x,
                  x + midDepth * cos(angle), y + midDepth * sin(angle));
 }
 
-// TODO: wait until scoreDisplayed is done animating on subsequent games
 void startMomentum(Side _side) {
   score = 0;
   momentum = initialMomentum;
@@ -125,10 +124,6 @@ void startMomentum(Side _side) {
   gamesPlayed += 1;
 }
 
-// TODO:
-// * redo slowDown
-// * tidy, extract consts + side stuff
-// * rate limit
 void handleInputs() {
   arduboy.pollButtons();
 
@@ -159,20 +154,12 @@ void handleInputs() {
   }
 
   if (arduboy.anyPressed(RIGHT_BUTTON | LEFT_BUTTON)) {
-    if (arduboy.pressed(LEFT_BUTTON)) {
-      if (momentum <= minMomentumToStart) {
-        startMomentum(Side::LEFT);
-      } else {
-        weight = getWeight(Side::LEFT, direction, step, stepsPerRock);
-        momentum *= max(1, momentumIncrement * weight);
-      }
-    } else if (arduboy.pressed(RIGHT_BUTTON)) {
-      if (momentum <= minMomentumToStart) {
-        startMomentum(Side::RIGHT);
-      } else {
-        weight = getWeight(Side::RIGHT, direction, step, stepsPerRock);
-        momentum *= max(1, momentumIncrement * weight);
-      }
+    if (momentum <= minMomentumToStart) {
+      startMomentum(hold);
+    } else {
+      // TODO: consider updateMomentum()
+      weight = getWeight(hold, direction, step, stepsPerRock);
+      momentum *= max(1, momentumIncrement * weight);
     }
   }
 
@@ -198,14 +185,12 @@ Xy getPosition() {
   xy.y = floorY - radius;
 
   if (isTipping) {
-    // TODO: DRY
-    if (direction == Side::RIGHT) {
-      xy.x += sin(radians(rotation)) * radius - radius;
-      xy.y -= cos(radians(90 - rotation)) * radius - radius - 1;
-    } else {
-      xy.x += sin(radians(rotation)) * radius + radius;
-      xy.y += cos(radians(90 - rotation)) * radius + radius + 1;
-    }
+    xy.x += sin(radians(rotation)) * radius +
+            (direction == Side::RIGHT ? -radius : radius);
+
+    xy.y += cos(radians(90 - rotation)) *
+                (radius * (direction == Side::RIGHT ? -1 : 1)) +
+            radius + 1;
   }
 
   if (hold == Side::RIGHT) {
@@ -223,24 +208,14 @@ Xy getPosition() {
   return xy;
 }
 
-// TODO: with a fresh head, really figure out deviation math here
-// there always seems to be a weird stutter in there
+// This could be smarter and use more math but I found it doesn't make
+// much of a difference in play. Simple seems fine for now.
 float getWeight(Side targetDirection, Side currentDirection, int i, int count) {
-  if (currentDirection == RIGHT) {
-    if (targetDirection == Side::RIGHT) {
-      return 1;
-    } else if (targetDirection == Side::LEFT) {
-      return 0;
-    }
-  } else if (currentDirection == LEFT) {
-    if (targetDirection == Side::RIGHT) {
-      return 0;
-    } else if (targetDirection == Side::LEFT) {
-      return 1;
-    }
+  if (targetDirection != currentDirection) {
+    return 0.0;
   }
 
-  return 1;
+  return 1.0;
 }
 
 const float getLinearDeviation(Side fromSide, Side toSide, int i, int count) {
