@@ -15,164 +15,196 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // * see about inlining math functions
 // * refine sound effects
 // * levels?
-// * Display struct
-// * Banana struct w/ display, momentum, amplitude, frequency; ints > float math
-// * -> banana maker to find values, test difficulty
-// * try filling body white by keeping track of top/bottomYs
-
-const int frameRate = 30;
-const int rockingAmplitudeDegrees = 90;
-const int tippingAmplitudeDegrees = rockingAmplitudeDegrees + 1;
-const int rockingFrequencyMs = 1000;
-const float momentumDropPerFrame = .05;
-const float minMomentumToStart = .01;
-const float minMomentumToScore = .1;
-const float initialMomentum = .1;
-const float momentumIncrement = 1.1;
-const int stepsPerRock = (frameRate * (rockingFrequencyMs / 1000.0)) / 2;
-const int scoreY = HEIGHT - 4;
-const int floorY = scoreY - 2;
-const int scoreIncrementMax = 10;
+// * banana maker to find values, test difficulty
+// * try overlapping circles for filled banana
 
 enum Side { CENTER, LEFT, RIGHT, UP, DOWN };
-
-int radius;
-int coverage;
-int rotation;
-int controlledRotation;
-int step;
-float momentum;
-float weight;
-Side side;
-Side direction;
-Side hold;
-bool isTipping;
-bool isActive;
-bool showStats = false;
-float deviation;
-int score;
-int scoreDisplayed = 0;
-int scoreBest = 0;
-int gamesPlayed = 0;
 
 struct Xy {
   int x;
   int y;
 };
 
+struct Animation {
+  const int frameRate = 30;
+  const int rockingFrequencyMs = 1000;
+  const float momentumDropPerFrame = .05;
+
+  int stepsPerRock;
+} animation;
+
+struct Game {
+  const float minMomentumToStart = .01;
+  const float minMomentumToScore = .1;
+  const int scoreIncrementMax = 10;
+
+  int score = 0;
+  int scoreDisplayed = 0;
+  int scoreBest = 0;
+  int gamesPlayed = 0;
+
+  // TODO: {idle, active, tipping, flipped}
+  bool isActive = false;
+  bool isTipping = false;
+} game;
+
+// Some of these might make more sense in other structs.
+// Maybe Input or Game? See what feels weird.
+struct Display {
+  const int floorY = HEIGHT - 6;
+  const int scoreY = HEIGHT - 4;
+
+  bool showStats = false;
+
+  int controlledRotation = 0;
+  int rotation = 0;
+
+  float momentum = 0;
+  float deviation = 0;
+  Side direction = Side::CENTER;
+  Side side = Side::CENTER;
+
+  int step = 0;
+  float weight = 0;
+} display;
+
+struct Input {
+  Side hold;
+} input;
+
+// NOTE: unapologetically magic values here, who cares
+struct Banana {
+  const int rockingAmplitudeDegrees = 90;
+  const int tippingAmplitudeDegrees = 91;
+
+  const float initialMomentum = .1;
+  const float momentumIncrement = 1.1;
+
+  const int outerRadius = 25;
+  const int outerArc = 170;
+
+  const int innerRadius = 50;
+  const int innerArc = 56;
+  const int depth = 43;
+  const int accentRadius = 37;
+  const int accentArc = 43;
+  const int accentDepth = 25;
+} banana;
+
 void reset() {
-  radius = 25;
-  coverage = 170;
-  rotation = 0;
-  controlledRotation = 0;
-  step = 0;
-  momentum = 0;
-  weight = 1;
-  side = Side::CENTER;
-  direction = Side::CENTER;
-  isTipping = false;
-  isActive = true;
-  deviation = 0;
-  score = 0;
+  display.controlledRotation = 0;
+  display.rotation = 0;
+
+  display.momentum = 0;
+  display.deviation = 0;
+  display.direction = Side::CENTER;
+  display.side = Side::CENTER;
+
+  display.step = 0;
+  display.weight = 1;
+
+  game.score = 0;
+  game.isTipping = false;
+  game.isActive = true;
+
+  animation.stepsPerRock =
+      (animation.frameRate * (animation.rockingFrequencyMs / 1000.0)) / 2;
 }
 
 void setup() {
   arduboy.beginDoFirst();
   arduboy.waitNoButtons();
-  arduboy.setFrameRate(frameRate);
+  arduboy.setFrameRate(animation.frameRate);
 
   reset();
 }
 
 // TODO: fix weird bumps at right and bottom
-void drawSemiCircle(int startingAngle, int coverage, int radius, int x, int y) {
+void drawSemiCircle(int startingAngle, int outerArc, int outerRadius, int x,
+                    int y) {
   for (int angle = (startingAngle + 90);
-       angle <= (startingAngle + 90) + coverage; ++angle) {
+       angle <= (startingAngle + 90) + outerArc; ++angle) {
     float radian = radians(angle);
-    int px = x + radius * cos(radian);
-    int py = y + radius * sin(radian);
+    int px = x + outerRadius * cos(radian);
+    int py = y + outerRadius * sin(radian);
     arduboy.drawPixel(px, py);
   }
 }
 
+// TODO: Banana as argument
 // TODO: a little stem should be easy enough
-void drawBanana(int bottomCoverage, int bottomRadius, int rotation, int x,
-                int y) {
-  // NOTE: unapologetically magic values here, who cares
-  int topRadius = bottomRadius * 2;
-  int topCoverage = bottomCoverage * .33;
-  int depth = bottomRadius * 1.75;
-  int midRadius = (topRadius + bottomRadius) / 2;
-  int midCoverage = topCoverage;
-  int midDepth = depth * .6;
+void drawBanana(int bottomArc, int bottomRadius, int rotation, int x, int y) {
+  float radian = radians(display.rotation - 90);
 
-  float angle = radians(rotation - 90);
-
-  drawSemiCircle(rotation - bottomCoverage / 2, bottomCoverage, bottomRadius, x,
+  drawSemiCircle(display.rotation - bottomArc / 2, bottomArc, bottomRadius, x,
                  y);
-  drawSemiCircle(rotation - topCoverage / 2, topCoverage, topRadius,
-                 x + depth * cos(angle), y + depth * sin(angle));
+  drawSemiCircle(display.rotation - banana.innerArc / 2, banana.innerArc,
+                 banana.innerRadius, x + banana.depth * cos(radian),
+                 y + banana.depth * sin(radian));
 
-  drawSemiCircle(rotation - midCoverage / 2, midCoverage, midRadius,
-                 x + midDepth * cos(angle), y + midDepth * sin(angle));
+  drawSemiCircle(display.rotation - banana.accentArc / 2, banana.accentArc,
+                 banana.accentRadius, x + banana.accentDepth * cos(radian),
+                 y + banana.accentDepth * sin(radian));
 }
 
-void startMomentum(Side _side) {
-  score = 0;
-  momentum = initialMomentum;
-  side = _side;
-  gamesPlayed += 1;
+void startMomentum(Side side) {
+  game.gamesPlayed += 1;
+  game.score = 0;
+
+  display.momentum = banana.initialMomentum;
+  display.side = side;
 }
 
 void handleInputs() {
   arduboy.pollButtons();
 
   if (arduboy.pressed(LEFT_BUTTON)) {
-    hold = Side::LEFT;
+    input.hold = Side::LEFT;
   } else if (arduboy.pressed(RIGHT_BUTTON)) {
-    hold = Side::RIGHT;
+    input.hold = Side::RIGHT;
   } else if (arduboy.pressed(UP_BUTTON)) {
-    hold = Side::UP;
+    input.hold = Side::UP;
   } else if (arduboy.pressed(DOWN_BUTTON)) {
-    hold = Side::DOWN;
+    input.hold = Side::DOWN;
   } else {
-    hold = Side::CENTER;
+    input.hold = Side::CENTER;
   }
 
   if (arduboy.justPressed(A_BUTTON)) {
-    showStats = !showStats;
+    display.showStats = !display.showStats;
   }
 
-  if (!isActive) {
+  if (!game.isActive) {
     if (arduboy.justPressed(A_BUTTON | B_BUTTON | RIGHT_BUTTON | LEFT_BUTTON |
                             DOWN_BUTTON | UP_BUTTON)) {
       reset();
-      scoreDisplayed = 0;
+      game.scoreDisplayed = 0;
     }
 
     return;
   }
 
   if (arduboy.anyPressed(RIGHT_BUTTON | LEFT_BUTTON)) {
-    if (momentum <= minMomentumToStart) {
-      startMomentum(hold);
+    if (display.momentum <= game.minMomentumToStart) {
+      startMomentum(input.hold);
     } else {
       // TODO: consider updateMomentum()
-      weight = getWeight(hold, direction, step, stepsPerRock);
-      momentum *= max(1, momentumIncrement * weight);
+      display.weight = getWeight(input.hold, display.direction, display.step,
+                                 animation.stepsPerRock);
+      display.momentum *= max(1, banana.momentumIncrement * display.weight);
     }
   }
 
-  if (momentum > minMomentumToStart) {
+  if (display.momentum > game.minMomentumToStart) {
     if (arduboy.anyPressed(DOWN_BUTTON | UP_BUTTON)) {
       if (arduboy.pressed(DOWN_BUTTON)) {
         sound.tones(SLOW);
       }
 
-      slowDown(momentumDropPerFrame * 4);
+      slowDown(animation.momentumDropPerFrame * 4);
 
-      if (!isTipping) {
-        score = max(0, score - 1);
+      if (!game.isTipping) {
+        game.score = max(0, game.score - 1);
       }
     }
   }
@@ -181,27 +213,29 @@ void handleInputs() {
 Xy getPosition() {
   Xy xy;
 
-  xy.x = WIDTH / 2 + (rotation / 360.0) * radius * 2 * M_PI;
-  xy.y = floorY - radius;
+  xy.x = WIDTH / 2 + (display.rotation / 360.0) * banana.outerRadius * 2 * M_PI;
+  xy.y = display.floorY - banana.outerRadius;
 
-  if (isTipping) {
-    xy.x += sin(radians(rotation)) * radius +
-            (direction == Side::RIGHT ? -radius : radius);
+  if (game.isTipping) {
+    xy.x += sin(radians(display.rotation)) * banana.outerRadius +
+            (display.direction == Side::RIGHT ? -banana.outerRadius
+                                              : banana.outerRadius);
 
-    xy.y += cos(radians(90 - rotation)) *
-                (radius * (direction == Side::RIGHT ? -1 : 1)) +
-            radius + 1;
+    xy.y +=
+        cos(radians(90 - display.rotation)) *
+            (banana.outerRadius * (display.direction == Side::RIGHT ? -1 : 1)) +
+        banana.outerRadius + 1;
   }
 
-  if (hold == Side::RIGHT) {
+  if (input.hold == Side::RIGHT) {
     xy.x += 1;
-  } else if (hold == Side::LEFT) {
+  } else if (input.hold == Side::LEFT) {
     xy.x -= 1;
   }
 
-  if (hold == Side::DOWN) {
+  if (input.hold == Side::DOWN) {
     xy.y += 1;
-  } else if (hold == Side::UP) {
+  } else if (input.hold == Side::UP) {
     xy.y -= 1;
   }
 
@@ -240,19 +274,19 @@ const float getEasedDeviation(Side fromSide, Side toSide, float i, int count) {
 }
 
 void scorePoint() {
-  if (momentum >= minMomentumToScore) {
+  if (display.momentum >= game.minMomentumToScore) {
     sound.tones(SCORE);
-    score += momentum * scoreIncrementMax;
-    scoreBest = max(score, scoreBest);
+    game.score += display.momentum * game.scoreIncrementMax;
+    game.scoreBest = max(game.score, game.scoreBest);
   }
 }
 
 void slowDown(float drop) {
-  momentum = momentum * (1.0 - drop);
+  display.momentum = display.momentum * (1.0 - drop);
 
-  if (momentum <= minMomentumToStart) {
-    momentum = 0;
-    step = 0;
+  if (display.momentum <= game.minMomentumToStart) {
+    display.momentum = 0;
+    display.step = 0;
   }
 }
 
@@ -263,174 +297,179 @@ void drawStats() {
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("GAMES:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(gamesPlayed);
+  tinyfont.print(game.gamesPlayed);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("STEP:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(step);
+  tinyfont.print(display.step);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("SIDE:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(side);
+  tinyfont.print(display.side);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("DIRECTION:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(direction);
+  tinyfont.print(display.direction);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("TIPPING:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(isTipping);
+  tinyfont.print(game.isTipping);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("ROTATION:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(rotation);
+  tinyfont.print(display.rotation);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("ctrlROT:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(controlledRotation);
+  tinyfont.print(display.controlledRotation);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("DEVIATION:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(deviation);
+  tinyfont.print(display.deviation);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("MOMENTUM:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(float(momentum));
+  tinyfont.print(float(display.momentum));
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("HOLD:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(hold);
+  tinyfont.print(input.hold);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
   tinyfont.print(F("WEIGHT:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(weight);
+  tinyfont.print(display.weight);
   line += 1;
 }
 
 void drawScore() {
   int scoreBestDigits = 1;
-  if (scoreBest >= 100) {
+  if (game.scoreBest >= 100) {
     scoreBestDigits = 3;
-  } else if (scoreBest >= 10) {
+  } else if (game.scoreBest >= 10) {
     scoreBestDigits = 2;
   }
 
-  tinyfont.setCursor(5 * 0, scoreY);
+  tinyfont.setCursor(5 * 0, display.scoreY);
   tinyfont.print(F("SCORE"));
-  tinyfont.setCursor(5 * 5 + 1, scoreY);
-  tinyfont.print(scoreDisplayed);
+  tinyfont.setCursor(5 * 5 + 1, display.scoreY);
+  tinyfont.print(game.scoreDisplayed);
 
-  if (gamesPlayed > 1 || score < scoreBest) {
-    tinyfont.setCursor(WIDTH - (5 * (4 + scoreBestDigits) + 1), scoreY);
+  if (game.gamesPlayed > 1 || game.score < game.scoreBest) {
+    tinyfont.setCursor(WIDTH - (5 * (4 + scoreBestDigits) + 1), display.scoreY);
     tinyfont.print(F("BEST"));
-    tinyfont.setCursor(WIDTH - (5 * scoreBestDigits) + 1, scoreY);
+    tinyfont.setCursor(WIDTH - (5 * scoreBestDigits) + 1, display.scoreY);
 
     // TODO: fix brief glimpse of score when new best is made
-    tinyfont.print(score == scoreBest ? scoreDisplayed : scoreBest);
+    tinyfont.print(game.score == game.scoreBest ? game.scoreDisplayed
+                                                : game.scoreBest);
   }
 }
 
 void updateRotation() {
-  deviation = getEasedDeviation(Side::CENTER, side, step, stepsPerRock);
+  display.deviation = getEasedDeviation(Side::CENTER, display.side,
+                                        display.step, animation.stepsPerRock);
 
-  if (isTipping) {
-    deviation = 1 - deviation; // 0 to 1 -> 1 to 2
-    rotation = controlledRotation + deviation *
-                                        (180 - abs(controlledRotation)) *
-                                        (side == Side::LEFT ? -1 : 1);
+  if (game.isTipping) {
+    display.deviation = 1 - display.deviation; // 0 to 1 -> 1 to 2
+    display.rotation = display.controlledRotation +
+                       display.deviation *
+                           (180 - abs(display.controlledRotation)) *
+                           (display.side == Side::LEFT ? -1 : 1);
   } else {
-    rotation = momentum * deviation * rockingAmplitudeDegrees *
-               (side == Side::LEFT ? -1 : 1);
-    controlledRotation = rotation;
+    display.rotation = display.momentum * display.deviation *
+                       banana.rockingAmplitudeDegrees *
+                       (display.side == Side::LEFT ? -1 : 1);
+    display.controlledRotation = display.rotation;
   }
 }
 
 void update() {
   updateRotation();
 
-  if (score > scoreDisplayed) {
-    scoreDisplayed += 1;
-  } else if (score < scoreDisplayed) {
-    scoreDisplayed -= 1;
+  if (game.score > game.scoreDisplayed) {
+    game.scoreDisplayed += 1;
+  } else if (game.score < game.scoreDisplayed) {
+    game.scoreDisplayed -= 1;
   }
 
-  if (isTipping || abs(rotation) >= tippingAmplitudeDegrees) {
-    if (!isTipping) {
+  if (game.isTipping ||
+      abs(display.rotation) >= banana.tippingAmplitudeDegrees) {
+    if (!game.isTipping) {
       // No matter where we are in the current rocking swing, if
-      // we're about to tip, reset current step to give the falling
+      // we're about to tip, reset current display.step to give the falling
       // animation a regular half cycle to complete.
-      step = ceil(stepsPerRock / 2.0);
+      display.step = ceil(animation.stepsPerRock / 2.0);
     }
 
-    isTipping = true;
-    direction = side;
+    game.isTipping = true;
+    display.direction = display.side;
 
-    if (step < stepsPerRock) {
-      step += 1;
+    if (display.step < animation.stepsPerRock) {
+      display.step += 1;
     } else {
-      if (isActive) {
+      if (game.isActive) {
         sound.tones(BUMP);
       }
 
-      if (isActive) {
-        gamesPlayed += 1;
+      if (game.isActive) {
+        game.gamesPlayed += 1;
       }
 
-      isActive = false;
+      game.isActive = false;
     }
 
     return;
   }
 
-  if (momentum > 0) {
-    step += 1;
-    slowDown(momentumDropPerFrame);
+  if (display.momentum > 0) {
+    display.step += 1;
+    slowDown(animation.momentumDropPerFrame);
 
-    if (step == stepsPerRock / 2) {
-      if (side == Side::LEFT) {
-        direction = Side::RIGHT;
-      } else if (side == Side::RIGHT) {
-        direction = Side::LEFT;
+    if (display.step == animation.stepsPerRock / 2) {
+      if (display.side == Side::LEFT) {
+        display.direction = Side::RIGHT;
+      } else if (display.side == Side::RIGHT) {
+        display.direction = Side::LEFT;
       }
     }
 
-    if (step == stepsPerRock) {
-      step = 0;
+    if (display.step == animation.stepsPerRock) {
+      display.step = 0;
 
-      if (momentum > minMomentumToStart) {
+      if (display.momentum > game.minMomentumToStart) {
         scorePoint();
 
-        if (side == Side::LEFT) {
-          side = Side::RIGHT;
-        } else if (side == Side::RIGHT) {
-          side = Side::LEFT;
+        if (display.side == Side::LEFT) {
+          display.side = Side::RIGHT;
+        } else if (display.side == Side::RIGHT) {
+          display.side = Side::LEFT;
         }
       }
     }
   } else {
-    side = Side::CENTER;
-    direction = Side::CENTER;
-    rotation = 0;
+    display.side = Side::CENTER;
+    display.direction = Side::CENTER;
+    display.rotation = 0;
   }
 }
 
@@ -444,14 +483,15 @@ void loop() {
 
   arduboy.clear();
 
-  if (showStats) {
+  if (display.showStats) {
     drawStats();
   }
 
   Xy position = getPosition();
-  drawBanana(coverage, radius, rotation, position.x, position.y);
+  drawBanana(banana.outerArc, banana.outerRadius, display.rotation, position.x,
+             position.y);
 
-  arduboy.drawFastHLine(0, floorY, WIDTH);
+  arduboy.drawFastHLine(0, display.floorY, WIDTH);
   drawScore();
 
   arduboy.display();
