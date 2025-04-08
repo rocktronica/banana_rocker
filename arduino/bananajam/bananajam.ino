@@ -9,8 +9,6 @@ ArduboyTones sound(arduboy.audio.enabled);
 Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 
 // TODO:
-// * title
-// * transition into new game after tip
 // * optimize variable types
 // * see about inlining math functions
 // * refine sound effects
@@ -19,7 +17,7 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // * try overlapping circles for filled banana
 
 enum Side { CENTER, LEFT, RIGHT, UP, DOWN };
-enum GameState { IDLE, ACTIVE, TIPPING, GAME_OVER };
+enum GameState { TITLE, ACTIVE, TIPPING, GAME_OVER };
 
 struct Position {
   int x;
@@ -44,12 +42,13 @@ struct Game {
   int scoreBest = 0;
   int gamesPlayed = 0;
 
-  GameState state = GameState::IDLE;
+  GameState state = GameState::TITLE;
 } game;
 
 // Some of these might make more sense in other structs.
 // Maybe Input or Game? See what feels weird.
 struct Display {
+  const int textY = 20;
   const int floorY = HEIGHT - 6;
   const int scoreY = HEIGHT - 4;
 
@@ -89,7 +88,7 @@ struct Banana {
   const int accentDepth = 25;
 } banana;
 
-void reset() {
+void resetGame() {
   animation.frame = 0;
 
   display.controlledRotation = 0;
@@ -101,7 +100,7 @@ void reset() {
   display.weight = 1;
 
   game.score = 0;
-  game.state = GameState::IDLE;
+  game.state = GameState::TITLE;
 }
 
 void setup() {
@@ -109,7 +108,7 @@ void setup() {
   arduboy.waitNoButtons();
   arduboy.setFrameRate(animation.frameRate);
 
-  reset();
+  resetGame();
 }
 
 // TODO: fix weird bumps at right and bottom
@@ -140,7 +139,7 @@ void drawBanana(Banana banana, Display display, Position position) {
                  position.y + banana.accentDepth * sin(radian));
 }
 
-void startMomentum(Side side) {
+void startNewGame(Side side) {
   game.gamesPlayed += 1;
   game.score = 0;
   game.state = GameState::ACTIVE;
@@ -148,6 +147,8 @@ void startMomentum(Side side) {
   display.momentum = banana.initialMomentum;
   display.side = side;
 }
+
+void endGame() { game.state = GameState::GAME_OVER; }
 
 void handleInputs() {
   arduboy.pollButtons();
@@ -164,27 +165,24 @@ void handleInputs() {
     input.hold = Side::CENTER;
   }
 
-  if (arduboy.justPressed(A_BUTTON)) {
+  if (arduboy.justPressed(A_BUTTON) && arduboy.justPressed(B_BUTTON)) {
     display.showStats = !display.showStats;
   }
 
   if (game.state == GameState::GAME_OVER) {
     if (arduboy.justPressed(A_BUTTON | B_BUTTON | RIGHT_BUTTON | LEFT_BUTTON |
                             DOWN_BUTTON | UP_BUTTON)) {
-      reset();
+      resetGame();
       game.scoreDisplayed = 0;
     }
 
     return;
   }
 
-  // TODO: use input.hold
   if (arduboy.anyPressed(RIGHT_BUTTON | LEFT_BUTTON)) {
-    // TODO: try minMomentumToScore so it's easier to start again
     if (display.momentum <= game.minMomentumToStart) {
-      startMomentum(input.hold);
+      startNewGame(input.hold);
     } else {
-      // TODO: consider updateMomentum()
       display.weight = getWeight(input.hold, display.direction, animation.frame,
                                  animation.framesPerRock);
       display.momentum *= max(1, banana.momentumIncrement * display.weight);
@@ -273,10 +271,8 @@ void scorePoint() {
 void slowDown(float drop) {
   display.momentum = display.momentum * (1.0 - drop);
 
-  // TODO: reset
   if (display.momentum <= game.minMomentumToStart) {
-    display.momentum = 0;
-    animation.frame = 0;
+    resetGame();
   }
 }
 
@@ -351,6 +347,21 @@ void drawStats() {
   line += 1;
 }
 
+void printCenteredText(__FlashStringHelper *string, int i) {
+  tinyfont.setCursor((WIDTH - 5 * 6) / 2, display.textY + 5 * i);
+  tinyfont.print(string);
+}
+
+void drawText() {
+  if (game.state == GameState::TITLE) {
+    printCenteredText(F("BANANA"), 0);
+    printCenteredText(F("ROCKER"), 1);
+  } else if (game.state == GameState::GAME_OVER) {
+    printCenteredText(F("GAME"), 0);
+    printCenteredText(F("OVER"), 1);
+  }
+}
+
 void drawScore() {
   int scoreBestDigits = 1;
   if (game.scoreBest >= 100) {
@@ -422,7 +433,7 @@ void update() {
       animation.frame += 1;
     } else {
       sound.tones(BUMP);
-      game.state = GameState::GAME_OVER;
+      endGame();
     }
 
     return;
@@ -477,6 +488,7 @@ void loop() {
   drawBanana(banana, display, getPosition());
 
   arduboy.drawFastHLine(0, display.floorY, WIDTH);
+  drawText();
   drawScore();
 
   arduboy.display();
