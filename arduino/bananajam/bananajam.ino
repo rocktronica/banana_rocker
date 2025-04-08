@@ -20,17 +20,17 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 
 enum Side { CENTER, LEFT, RIGHT, UP, DOWN };
 
-struct Xy {
+struct Position {
   int x;
   int y;
 };
 
 struct Animation {
   const int frameRate = 30;
-  const int rockingFrequencyMs = 1000;
   const float momentumDropPerFrame = .05;
+  const int framesPerRock = 15;
 
-  int stepsPerRock;
+  int frame = 0;
 } animation;
 
 struct Game {
@@ -64,7 +64,6 @@ struct Display {
   Side direction = Side::CENTER;
   Side side = Side::CENTER;
 
-  int step = 0;
   float weight = 0;
 } display;
 
@@ -92,23 +91,19 @@ struct Banana {
 } banana;
 
 void reset() {
+  animation.frame = 0;
+
   display.controlledRotation = 0;
   display.rotation = 0;
-
   display.momentum = 0;
   display.deviation = 0;
   display.direction = Side::CENTER;
   display.side = Side::CENTER;
-
-  display.step = 0;
   display.weight = 1;
 
   game.score = 0;
   game.isTipping = false;
   game.isActive = true;
-
-  animation.stepsPerRock =
-      (animation.frameRate * (animation.rockingFrequencyMs / 1000.0)) / 2;
 }
 
 void setup() {
@@ -131,20 +126,20 @@ void drawSemiCircle(int startingAngle, int outerArc, int outerRadius, int x,
   }
 }
 
-// TODO: Banana as argument
 // TODO: a little stem should be easy enough
-void drawBanana(int bottomArc, int bottomRadius, int rotation, int x, int y) {
+void drawBanana(Banana banana, Display display, Position position) {
   float radian = radians(display.rotation - 90);
 
-  drawSemiCircle(display.rotation - bottomArc / 2, bottomArc, bottomRadius, x,
-                 y);
+  drawSemiCircle(display.rotation - banana.outerArc / 2, banana.outerArc,
+                 banana.outerRadius, position.x, position.y);
   drawSemiCircle(display.rotation - banana.innerArc / 2, banana.innerArc,
-                 banana.innerRadius, x + banana.depth * cos(radian),
-                 y + banana.depth * sin(radian));
+                 banana.innerRadius, position.x + banana.depth * cos(radian),
+                 position.y + banana.depth * sin(radian));
 
   drawSemiCircle(display.rotation - banana.accentArc / 2, banana.accentArc,
-                 banana.accentRadius, x + banana.accentDepth * cos(radian),
-                 y + banana.accentDepth * sin(radian));
+                 banana.accentRadius,
+                 position.x + banana.accentDepth * cos(radian),
+                 position.y + banana.accentDepth * sin(radian));
 }
 
 void startMomentum(Side side) {
@@ -189,8 +184,8 @@ void handleInputs() {
       startMomentum(input.hold);
     } else {
       // TODO: consider updateMomentum()
-      display.weight = getWeight(input.hold, display.direction, display.step,
-                                 animation.stepsPerRock);
+      display.weight = getWeight(input.hold, display.direction, animation.frame,
+                                 animation.framesPerRock);
       display.momentum *= max(1, banana.momentumIncrement * display.weight);
     }
   }
@@ -210,8 +205,8 @@ void handleInputs() {
   }
 }
 
-Xy getPosition() {
-  Xy xy;
+Position getPosition() {
+  Position xy;
 
   xy.x = WIDTH / 2 + (display.rotation / 360.0) * banana.outerRadius * 2 * M_PI;
   xy.y = display.floorY - banana.outerRadius;
@@ -286,7 +281,7 @@ void slowDown(float drop) {
 
   if (display.momentum <= game.minMomentumToStart) {
     display.momentum = 0;
-    display.step = 0;
+    animation.frame = 0;
   }
 }
 
@@ -301,9 +296,9 @@ void drawStats() {
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("STEP:"));
+  tinyfont.print(F("FRAME:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(display.step);
+  tinyfont.print(animation.frame);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
@@ -386,8 +381,8 @@ void drawScore() {
 }
 
 void updateRotation() {
-  display.deviation = getEasedDeviation(Side::CENTER, display.side,
-                                        display.step, animation.stepsPerRock);
+  display.deviation = getEasedDeviation(
+      Side::CENTER, display.side, animation.frame, animation.framesPerRock);
 
   if (game.isTipping) {
     display.deviation = 1 - display.deviation; // 0 to 1 -> 1 to 2
@@ -416,16 +411,16 @@ void update() {
       abs(display.rotation) >= banana.tippingAmplitudeDegrees) {
     if (!game.isTipping) {
       // No matter where we are in the current rocking swing, if
-      // we're about to tip, reset current display.step to give the falling
+      // we're about to tip, reset current frame to give the falling
       // animation a regular half cycle to complete.
-      display.step = ceil(animation.stepsPerRock / 2.0);
+      animation.frame = ceil(animation.framesPerRock / 2.0);
     }
 
     game.isTipping = true;
     display.direction = display.side;
 
-    if (display.step < animation.stepsPerRock) {
-      display.step += 1;
+    if (animation.frame < animation.framesPerRock) {
+      animation.frame += 1;
     } else {
       if (game.isActive) {
         sound.tones(BUMP);
@@ -442,10 +437,10 @@ void update() {
   }
 
   if (display.momentum > 0) {
-    display.step += 1;
+    animation.frame += 1;
     slowDown(animation.momentumDropPerFrame);
 
-    if (display.step == animation.stepsPerRock / 2) {
+    if (animation.frame == animation.framesPerRock / 2) {
       if (display.side == Side::LEFT) {
         display.direction = Side::RIGHT;
       } else if (display.side == Side::RIGHT) {
@@ -453,8 +448,8 @@ void update() {
       }
     }
 
-    if (display.step == animation.stepsPerRock) {
-      display.step = 0;
+    if (animation.frame == animation.framesPerRock) {
+      animation.frame = 0;
 
       if (display.momentum > game.minMomentumToStart) {
         scorePoint();
@@ -487,9 +482,7 @@ void loop() {
     drawStats();
   }
 
-  Xy position = getPosition();
-  drawBanana(banana.outerArc, banana.outerRadius, display.rotation, position.x,
-             position.y);
+  drawBanana(banana, display, getPosition());
 
   arduboy.drawFastHLine(0, display.floorY, WIDTH);
   drawScore();
