@@ -193,17 +193,8 @@ void handleInputs() {
 
   if (display.momentum > game.minMomentumToStart) {
     if (arduboy.anyPressed(DOWN_BUTTON | UP_BUTTON)) {
-      if (arduboy.pressed(DOWN_BUTTON)) {
-        sound.tones(SLOW);
-      }
-
-      slowDown(animation.momentumDropPerFrame * 4);
-
-      // TODO: (game.state == GameState::ACTIVE)
-      // or ditch entirely?
-      if (game.state != GameState::TIPPING) {
-        game.score = max(0, game.score - 1);
-      }
+      sound.tones(SLOW);
+      slowDown(animation.momentumDropPerFrame * 2);
     }
   }
 }
