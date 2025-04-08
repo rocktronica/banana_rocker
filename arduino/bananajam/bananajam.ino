@@ -19,6 +19,7 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // * try overlapping circles for filled banana
 
 enum Side { CENTER, LEFT, RIGHT, UP, DOWN };
+enum GameState { IDLE, ACTIVE, TIPPING, GAME_OVER };
 
 struct Position {
   int x;
@@ -43,9 +44,7 @@ struct Game {
   int scoreBest = 0;
   int gamesPlayed = 0;
 
-  // TODO: {idle, active, tipping, flipped}
-  bool isActive = false;
-  bool isTipping = false;
+  GameState state = GameState::IDLE;
 } game;
 
 // Some of these might make more sense in other structs.
@@ -102,8 +101,7 @@ void reset() {
   display.weight = 1;
 
   game.score = 0;
-  game.isTipping = false;
-  game.isActive = true;
+  game.state = GameState::IDLE;
 }
 
 void setup() {
@@ -145,6 +143,7 @@ void drawBanana(Banana banana, Display display, Position position) {
 void startMomentum(Side side) {
   game.gamesPlayed += 1;
   game.score = 0;
+  game.state = GameState::ACTIVE;
 
   display.momentum = banana.initialMomentum;
   display.side = side;
@@ -169,7 +168,7 @@ void handleInputs() {
     display.showStats = !display.showStats;
   }
 
-  if (!game.isActive) {
+  if (game.state == GameState::GAME_OVER) {
     if (arduboy.justPressed(A_BUTTON | B_BUTTON | RIGHT_BUTTON | LEFT_BUTTON |
                             DOWN_BUTTON | UP_BUTTON)) {
       reset();
@@ -179,7 +178,9 @@ void handleInputs() {
     return;
   }
 
+  // TODO: use input.hold
   if (arduboy.anyPressed(RIGHT_BUTTON | LEFT_BUTTON)) {
+    // TODO: try minMomentumToScore so it's easier to start again
     if (display.momentum <= game.minMomentumToStart) {
       startMomentum(input.hold);
     } else {
@@ -198,7 +199,9 @@ void handleInputs() {
 
       slowDown(animation.momentumDropPerFrame * 4);
 
-      if (!game.isTipping) {
+      // TODO: (game.state == GameState::ACTIVE)
+      // or ditch entirely?
+      if (game.state != GameState::TIPPING) {
         game.score = max(0, game.score - 1);
       }
     }
@@ -211,7 +214,7 @@ Position getPosition() {
   xy.x = WIDTH / 2 + (display.rotation / 360.0) * banana.outerRadius * 2 * M_PI;
   xy.y = display.floorY - banana.outerRadius;
 
-  if (game.isTipping) {
+  if (game.state == GameState::TIPPING || game.state == GameState::GAME_OVER) {
     xy.x += sin(radians(display.rotation)) * banana.outerRadius +
             (display.direction == Side::RIGHT ? -banana.outerRadius
                                               : banana.outerRadius);
@@ -279,6 +282,7 @@ void scorePoint() {
 void slowDown(float drop) {
   display.momentum = display.momentum * (1.0 - drop);
 
+  // TODO: reset
   if (display.momentum <= game.minMomentumToStart) {
     display.momentum = 0;
     animation.frame = 0;
@@ -314,9 +318,9 @@ void drawStats() {
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("TIPPING:"));
+  tinyfont.print(F("STATE:"));
   tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(game.isTipping);
+  tinyfont.print(game.state);
   line += 1;
 
   tinyfont.setCursor(0, 5 * line);
@@ -384,7 +388,7 @@ void updateRotation() {
   display.deviation = getEasedDeviation(
       Side::CENTER, display.side, animation.frame, animation.framesPerRock);
 
-  if (game.isTipping) {
+  if (game.state == GameState::TIPPING || game.state == GameState::GAME_OVER) {
     display.deviation = 1 - display.deviation; // 0 to 1 -> 1 to 2
     display.rotation = display.controlledRotation +
                        display.deviation *
@@ -407,30 +411,27 @@ void update() {
     game.scoreDisplayed -= 1;
   }
 
-  if (game.isTipping ||
-      abs(display.rotation) >= banana.tippingAmplitudeDegrees) {
-    if (!game.isTipping) {
+  if (game.state == GameState::GAME_OVER) {
+    return;
+  }
+
+  if (abs(display.rotation) >= banana.tippingAmplitudeDegrees) {
+    if (game.state == GameState::ACTIVE) {
       // No matter where we are in the current rocking swing, if
       // we're about to tip, reset current frame to give the falling
       // animation a regular half cycle to complete.
       animation.frame = ceil(animation.framesPerRock / 2.0);
     }
-
-    game.isTipping = true;
+    game.state = GameState::TIPPING;
     display.direction = display.side;
+  }
 
+  if (game.state == GameState::TIPPING) {
     if (animation.frame < animation.framesPerRock) {
       animation.frame += 1;
     } else {
-      if (game.isActive) {
-        sound.tones(BUMP);
-      }
-
-      if (game.isActive) {
-        game.gamesPlayed += 1;
-      }
-
-      game.isActive = false;
+      sound.tones(BUMP);
+      game.state = GameState::GAME_OVER;
     }
 
     return;
