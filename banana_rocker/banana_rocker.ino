@@ -68,7 +68,8 @@ struct Display {
   const int floorY = HEIGHT - 6;
   const int scoreY = HEIGHT - 4;
 
-  bool showStats = false;
+  // TODO: bring back a nice way to toggle this, or ditch
+  const bool showStats = false;
 
   const int titleMsMin = 1000;
   int titleMsStart = 0;
@@ -143,9 +144,9 @@ void handleInputs() {
 
   arduboy.pollButtons();
 
-  if (arduboy.pressed(LEFT_BUTTON)) {
+  if (arduboy.pressed(LEFT_BUTTON) || arduboy.pressed(A_BUTTON)) {
     input.hold = Side::LEFT;
-  } else if (arduboy.pressed(RIGHT_BUTTON)) {
+  } else if (arduboy.pressed(RIGHT_BUTTON) || arduboy.pressed(B_BUTTON)) {
     input.hold = Side::RIGHT;
   } else if (arduboy.pressed(UP_BUTTON)) {
     input.hold = Side::UP;
@@ -155,20 +156,12 @@ void handleInputs() {
     input.hold = Side::CENTER;
   }
 
-  if (arduboy.justPressed(A_BUTTON) && arduboy.justPressed(B_BUTTON)) {
-    display.showStats = !display.showStats;
-  }
-
-  if (game.state == GameState::GAME_OVER) {
-    if (arduboy.justPressed(A_BUTTON | B_BUTTON | RIGHT_BUTTON | LEFT_BUTTON |
-                            DOWN_BUTTON | UP_BUTTON)) {
-      resetGame();
-    }
-
+  if (game.state == GameState::GAME_OVER && input.hold != Side::CENTER) {
+    resetGame();
     return;
   }
 
-  if (arduboy.anyPressed(RIGHT_BUTTON | LEFT_BUTTON)) {
+  if (input.hold == Side::LEFT || input.hold == Side::RIGHT) {
     if (display.momentum <= game.minMomentumToStart) {
       startNewGame(input.hold);
     } else {
