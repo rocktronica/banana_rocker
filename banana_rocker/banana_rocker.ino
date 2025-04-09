@@ -2,6 +2,8 @@
 #include <ArduboyTones.h>
 #include <Tinyfont.h>
 
+#include "banana.h"
+
 Arduboy2 arduboy;
 ArduboyTones sound(arduboy.audio.enabled);
 Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
@@ -82,27 +84,7 @@ struct Input {
   Side hold;
 } input;
 
-// NOTE: unapologetically magic values here, who cares
-struct Banana {
-  const float initialMomentum = .15;
-  const float momentumIncrement = 1.15;
-
-  const int outerRadius = 25;
-  const int outerArc = 170;
-
-  const int innerRadius = 50;
-  const int innerArc = 56;
-  const int depth = 43;
-  const int accentRadius = 37;
-  const int accentArc = 43;
-  const int accentDepth = 25;
-
-  const int stemLength = 10;
-  const int stemDepth = 5;
-  const int stemOverlap = 10;
-
-  const int tippingAmplitudeDegrees = (170 / 2) + 1;
-} banana;
+Banana banana;
 
 void reset() {
   animation.frame = 0;
@@ -133,56 +115,8 @@ void setup() {
   reset();
 }
 
-// NOTE: startingAngle is clockwise from bottom
-void drawSemiCircle(int startingAngle, int arc, int radius, uint8_t color,
-                    int x, int y) {
-  for (int angle = (startingAngle + 90); angle <= (startingAngle + 90) + arc;
-       ++angle) {
-    float radian = radians(angle);
-    int px = x + radius * cos(radian);
-    int py = y + radius * sin(radian);
-
-    // HACK!: for math reasons I don't know or care about, the bottom and right
-    // pixels both stick out one. This very dumbly nudges them back in.
-    if (angle == 0 || angle == 360) {
-      px -= 1;
-    } else if (angle == 90) {
-      py -= 1;
-    }
-
-    arduboy.drawPixel(px, py, color);
-  }
-}
-
 void drawBanana(Banana banana, Display display, Position position) {
-  float radian = radians(display.rotation - 90);
-
-  arduboy.fillCircle(position.x, position.y, banana.outerRadius);
-  arduboy.fillCircle(position.x + banana.depth * cos(radian),
-                     position.y + banana.depth * sin(radian),
-                     banana.innerRadius, BLACK);
-
-  //  Inner accent
-  drawSemiCircle(display.rotation - banana.accentArc / 2, banana.accentArc,
-                 banana.accentRadius, BLACK,
-                 position.x + banana.accentDepth * cos(radian),
-                 position.y + banana.accentDepth * sin(radian));
-
-  // Stem
-  drawSemiCircle(display.rotation + banana.outerArc / 2 - banana.stemOverlap,
-                 banana.stemLength, banana.outerRadius, WHITE, position.x,
-                 position.y);
-  for (int i = 1; i < banana.stemDepth - 1; i++) {
-    drawSemiCircle(display.rotation + banana.outerArc / 2 - banana.stemOverlap,
-                   banana.stemLength, banana.outerRadius - i, BLACK, position.x,
-                   position.y);
-    drawSemiCircle(display.rotation + banana.outerArc / 2 - banana.stemOverlap +
-                       banana.stemLength,
-                   1, banana.outerRadius - i, WHITE, position.x, position.y);
-  }
-  drawSemiCircle(display.rotation + banana.outerArc / 2 - banana.stemOverlap,
-                 banana.stemLength, banana.outerRadius - (banana.stemDepth - 1),
-                 WHITE, position.x, position.y);
+  drawBanana(banana, display.rotation, position.x, position.y);
 }
 
 void startNewGame(Side side) {
