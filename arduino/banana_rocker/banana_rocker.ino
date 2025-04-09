@@ -2,8 +2,6 @@
 #include <ArduboyTones.h>
 #include <Tinyfont.h>
 
-#include "noise.h"
-
 Arduboy2 arduboy;
 ArduboyTones sound(arduboy.audio.enabled);
 Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
@@ -11,10 +9,14 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // TODO:
 // * optimize variable types
 // * see about inlining math functions
-// * refine sound effects
 // * levels?
 // * banana maker to find values, test difficulty
 // * try overlapping circles for filled banana
+
+const uint16_t SCORE[] PROGMEM = {NOTE_C4, 34, NOTE_E4,  34,
+                                  NOTE_C5, 68, TONES_END};
+const uint16_t FLIP[] PROGMEM = {NOTE_E3, 34, NOTE_F3, 34, TONES_END};
+const uint16_t SLOW[] PROGMEM = {NOTE_E3, 16, NOTE_F3, 34, TONES_END};
 
 enum Side { CENTER, LEFT, RIGHT, UP, DOWN };
 enum GameState { TITLE, ACTIVE, TIPPING, GAME_OVER };
@@ -453,7 +455,7 @@ void update() {
     if (animation.frame < animation.framesPerRock) {
       animation.frame += 1;
     } else {
-      sound.tones(FALL);
+      sound.tones(FLIP);
       endGame();
     }
 
