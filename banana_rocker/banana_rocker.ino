@@ -12,6 +12,7 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // * optimize variable types
 // * see about inlining math functions
 // * banana maker to find values, test difficulty
+// * animate new game title sequence
 
 const uint16_t SCORE[] PROGMEM = {NOTE_C4, 34, NOTE_E4,  34,
                                   NOTE_C5, 68, TONES_END};
@@ -69,6 +70,10 @@ struct Display {
 
   bool showStats = false;
 
+  const int titleMsMin = 1000;
+  int titleMsStart = 0;
+  int titleMsDisplayed = 0;
+
   int controlledRotation = 0;
   int rotation = 0;
 
@@ -89,6 +94,8 @@ Banana banana;
 void reset() {
   animation.frame = 0;
 
+  display.titleMsStart = 0;
+  display.titleMsDisplayed = 0;
   display.controlledRotation = 0;
   display.rotation = 0;
   display.momentum = 0;
@@ -101,7 +108,6 @@ void reset() {
   game.state = GameState::TITLE;
 }
 
-// TODO: pause on title on new game bc the title is so great
 void resetGame() {
   reset();
   game.scoreDisplayed = 0;
@@ -131,6 +137,10 @@ void startNewGame(Side side) {
 void endGame() { game.state = GameState::GAME_OVER; }
 
 void handleInputs() {
+  if (display.titleMsDisplayed < display.titleMsMin) {
+    return;
+  }
+
   arduboy.pollButtons();
 
   if (arduboy.pressed(LEFT_BUTTON)) {
@@ -390,6 +400,16 @@ void update() {
     game.scoreDisplayed += 1;
   } else if (game.score < game.scoreDisplayed) {
     game.scoreDisplayed -= 1;
+  }
+
+  if (game.state == GameState::TITLE &&
+      display.titleMsDisplayed < display.titleMsMin) {
+    if (display.titleMsStart == 0) {
+      display.titleMsStart = millis();
+      return;
+    }
+
+    display.titleMsDisplayed = millis() - display.titleMsStart;
   }
 
   if (game.state == GameState::GAME_OVER) {
