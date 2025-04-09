@@ -48,7 +48,7 @@ struct Game {
 // Some of these might make more sense in other structs.
 // Maybe Input or Game? See what feels weird.
 struct Display {
-  const int textY = 20;
+  const int textY = 15;
   const int floorY = HEIGHT - 6;
   const int scoreY = HEIGHT - 4;
 
@@ -71,9 +71,6 @@ struct Input {
 
 // NOTE: unapologetically magic values here, who cares
 struct Banana {
-  const int rockingAmplitudeDegrees = 90;
-  const int tippingAmplitudeDegrees = 91;
-
   const float initialMomentum = .1;
   const float momentumIncrement = 1.1;
 
@@ -89,6 +86,8 @@ struct Banana {
 
   const int stemLength = 15;
   const int stemDepth = 4;
+
+  const int tippingAmplitudeDegrees = (170 / 2) + 1;
 } banana;
 
 void resetGame() {
@@ -114,7 +113,6 @@ void setup() {
   resetGame();
 }
 
-// TODO: fix weird bumps at right and bottom
 // NOTE: startingAngle is clockwise from bottom
 void drawSemiCircle(int startingAngle, int arc, int radius, int x, int y) {
   for (int angle = (startingAngle + 90); angle <= (startingAngle + 90) + arc;
@@ -122,6 +120,15 @@ void drawSemiCircle(int startingAngle, int arc, int radius, int x, int y) {
     float radian = radians(angle);
     int px = x + radius * cos(radian);
     int py = y + radius * sin(radian);
+
+    // HACK!: for math reasons I don't know or care about, the bottom and right
+    // pixels both stick out one. This very dumbly nudges them back in.
+    if (angle == 0 || angle == 360) {
+      px -= 1;
+    } else if (angle == 90) {
+      py -= 1;
+    }
+
     arduboy.drawPixel(px, py);
   }
 }
@@ -412,7 +419,7 @@ void updateRotation() {
                            (display.side == Side::LEFT ? -1 : 1);
   } else {
     display.rotation = display.momentum * display.deviation *
-                       banana.rockingAmplitudeDegrees *
+                       (banana.outerArc / 2) *
                        (display.side == Side::LEFT ? -1 : 1);
     display.controlledRotation = display.rotation;
   }
@@ -446,7 +453,7 @@ void update() {
     if (animation.frame < animation.framesPerRock) {
       animation.frame += 1;
     } else {
-      sound.tones(BUMP);
+      sound.tones(FALL);
       endGame();
     }
 
