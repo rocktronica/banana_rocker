@@ -86,6 +86,9 @@ struct Banana {
   const int accentRadius = 37;
   const int accentArc = 43;
   const int accentDepth = 25;
+
+  const int stemLength = 15;
+  const int stemDepth = 4;
 } banana;
 
 void resetGame() {
@@ -112,18 +115,17 @@ void setup() {
 }
 
 // TODO: fix weird bumps at right and bottom
-void drawSemiCircle(int startingAngle, int outerArc, int outerRadius, int x,
-                    int y) {
-  for (int angle = (startingAngle + 90);
-       angle <= (startingAngle + 90) + outerArc; ++angle) {
+// NOTE: startingAngle is clockwise from bottom
+void drawSemiCircle(int startingAngle, int arc, int radius, int x, int y) {
+  for (int angle = (startingAngle + 90); angle <= (startingAngle + 90) + arc;
+       ++angle) {
     float radian = radians(angle);
-    int px = x + outerRadius * cos(radian);
-    int py = y + outerRadius * sin(radian);
+    int px = x + radius * cos(radian);
+    int py = y + radius * sin(radian);
     arduboy.drawPixel(px, py);
   }
 }
 
-// TODO: a little stem should be easy enough
 void drawBanana(Banana banana, Display display, Position position) {
   float radian = radians(display.rotation - 90);
 
@@ -133,10 +135,22 @@ void drawBanana(Banana banana, Display display, Position position) {
                  banana.innerRadius, position.x + banana.depth * cos(radian),
                  position.y + banana.depth * sin(radian));
 
+  //  Inner accent
   drawSemiCircle(display.rotation - banana.accentArc / 2, banana.accentArc,
                  banana.accentRadius,
                  position.x + banana.accentDepth * cos(radian),
                  position.y + banana.accentDepth * sin(radian));
+
+  // Stem
+  drawSemiCircle(display.rotation + banana.outerArc / 2, banana.stemLength,
+                 banana.outerRadius, position.x, position.y);
+  for (int i = 1; i < banana.stemDepth - 1; i++) {
+    drawSemiCircle(display.rotation + banana.outerArc / 2 + banana.stemLength,
+                   1, banana.outerRadius - i, position.x, position.y);
+  }
+  drawSemiCircle(display.rotation + banana.outerArc / 2, banana.stemLength,
+                 banana.outerRadius - (banana.stemDepth - 1), position.x,
+                 position.y);
 }
 
 void startNewGame(Side side) {
