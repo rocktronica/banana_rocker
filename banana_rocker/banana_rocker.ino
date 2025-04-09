@@ -71,9 +71,9 @@ struct Display {
   // TODO: bring back a nice way to toggle this, or ditch
   const bool showStats = false;
 
-  const int titleMsMin = 1000;
-  int titleMsStart = 0;
-  int titleMsDisplayed = 0;
+  const int textStageMsMin = 1000;
+  int textStageMsStart = 0;
+  int textStageMsDisplayed = 0;
 
   int controlledRotation = 0;
   int rotation = 0;
@@ -95,8 +95,8 @@ Banana banana;
 void reset() {
   animation.frame = 0;
 
-  display.titleMsStart = 0;
-  display.titleMsDisplayed = 0;
+  display.textStageMsStart = 0;
+  display.textStageMsDisplayed = 0;
   display.controlledRotation = 0;
   display.rotation = 0;
   display.momentum = 0;
@@ -135,10 +135,14 @@ void startNewGame(Side side) {
   display.side = side;
 }
 
-void endGame() { game.state = GameState::GAME_OVER; }
+void endGame() {
+  game.state = GameState::GAME_OVER;
+  display.textStageMsStart = millis();
+  display.textStageMsDisplayed = 0;
+}
 
 void handleInputs() {
-  if (display.titleMsDisplayed < display.titleMsMin) {
+  if (display.textStageMsDisplayed < display.textStageMsMin) {
     return;
   }
 
@@ -395,14 +399,15 @@ void update() {
     game.scoreDisplayed -= 1;
   }
 
-  if (game.state == GameState::TITLE &&
-      display.titleMsDisplayed < display.titleMsMin) {
-    if (display.titleMsStart == 0) {
-      display.titleMsStart = millis();
-      return;
-    }
+  if (game.state == GameState::TITLE || game.state == GameState::GAME_OVER) {
+    if (display.textStageMsDisplayed < display.textStageMsMin) {
+      if (display.textStageMsStart == 0) {
+        display.textStageMsStart = millis();
+        return;
+      }
 
-    display.titleMsDisplayed = millis() - display.titleMsStart;
+      display.textStageMsDisplayed = millis() - display.textStageMsStart;
+    }
   }
 
   if (game.state == GameState::GAME_OVER) {
