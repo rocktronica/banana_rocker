@@ -6,14 +6,15 @@
 set -o errexit
 set -o errtrace
 
+stub="banana_rocker"
+
 ardens="/Applications/Ardens/Ardens.app/Contents/MacOS/Ardens"
 
 fbqn="arduboy:avr:arduboy"
 port="/dev/cu.usbmodem143101"
 
-stub=$(ls arduino | xargs)
-input_path="$PWD/arduino/${stub}/${stub}.ino"
-build_dir="$PWD/build"
+input_path="$PWD/${stub}/${stub}.ino"
+build_dir="$PWD/build/${stub}"
 build_path="${build_dir}/${stub}.ino.hex"
 
 function help() {
@@ -25,7 +26,7 @@ Usage:
 
 ./run.sh compile            Compile
 ./run.sh emulate            Emulate
-./run.sh dev                Compile and emuluate
+./run.sh dev                Compile and emulate
                             Looped! Quit emulator to refresh
 ./run.sh deploy             Compile and upload
                             Default port: $port
