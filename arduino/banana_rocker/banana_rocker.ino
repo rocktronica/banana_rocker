@@ -9,9 +9,7 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // TODO:
 // * optimize variable types
 // * see about inlining math functions
-// * levels?
 // * banana maker to find values, test difficulty
-// * try overlapping circles for filled banana
 
 const uint16_t SCORE[] PROGMEM = {NOTE_C4, 34, NOTE_E4,  34,
                                   NOTE_C5, 68, TONES_END};
@@ -73,8 +71,8 @@ struct Input {
 
 // NOTE: unapologetically magic values here, who cares
 struct Banana {
-  const float initialMomentum = .1;
-  const float momentumIncrement = 1.1;
+  const float initialMomentum = .15;
+  const float momentumIncrement = 1.15;
 
   const int outerRadius = 25;
   const int outerArc = 170;
@@ -86,13 +84,14 @@ struct Banana {
   const int accentArc = 43;
   const int accentDepth = 25;
 
-  const int stemLength = 15;
-  const int stemDepth = 4;
+  const int stemLength = 10;
+  const int stemDepth = 5;
+  const int stemOverlap = 5;
 
   const int tippingAmplitudeDegrees = (170 / 2) + 1;
 } banana;
 
-void resetGame() {
+void reset() {
   animation.frame = 0;
 
   display.controlledRotation = 0;
@@ -107,16 +106,23 @@ void resetGame() {
   game.state = GameState::TITLE;
 }
 
+// TODO: pause on title on new game
+void resetGame() {
+  reset();
+  game.scoreDisplayed = 0;
+}
+
 void setup() {
   arduboy.beginDoFirst();
   arduboy.waitNoButtons();
   arduboy.setFrameRate(animation.frameRate);
 
-  resetGame();
+  reset();
 }
 
 // NOTE: startingAngle is clockwise from bottom
-void drawSemiCircle(int startingAngle, int arc, int radius, int x, int y) {
+void drawSemiCircle(int startingAngle, int arc, int radius, uint8_t color,
+                    int x, int y) {
   for (int angle = (startingAngle + 90); angle <= (startingAngle + 90) + arc;
        ++angle) {
     float radian = radians(angle);
@@ -131,35 +137,39 @@ void drawSemiCircle(int startingAngle, int arc, int radius, int x, int y) {
       py -= 1;
     }
 
-    arduboy.drawPixel(px, py);
+    arduboy.drawPixel(px, py, color);
   }
 }
 
 void drawBanana(Banana banana, Display display, Position position) {
   float radian = radians(display.rotation - 90);
 
-  drawSemiCircle(display.rotation - banana.outerArc / 2, banana.outerArc,
-                 banana.outerRadius, position.x, position.y);
-  drawSemiCircle(display.rotation - banana.innerArc / 2, banana.innerArc,
-                 banana.innerRadius, position.x + banana.depth * cos(radian),
-                 position.y + banana.depth * sin(radian));
+  arduboy.fillCircle(position.x, position.y, banana.outerRadius);
+  arduboy.fillCircle(position.x + banana.depth * cos(radian),
+                     position.y + banana.depth * sin(radian),
+                     banana.innerRadius, BLACK);
 
   //  Inner accent
   drawSemiCircle(display.rotation - banana.accentArc / 2, banana.accentArc,
-                 banana.accentRadius,
+                 banana.accentRadius, BLACK,
                  position.x + banana.accentDepth * cos(radian),
                  position.y + banana.accentDepth * sin(radian));
 
   // Stem
-  drawSemiCircle(display.rotation + banana.outerArc / 2, banana.stemLength,
-                 banana.outerRadius, position.x, position.y);
-  for (int i = 1; i < banana.stemDepth - 1; i++) {
-    drawSemiCircle(display.rotation + banana.outerArc / 2 + banana.stemLength,
-                   1, banana.outerRadius - i, position.x, position.y);
-  }
-  drawSemiCircle(display.rotation + banana.outerArc / 2, banana.stemLength,
-                 banana.outerRadius - (banana.stemDepth - 1), position.x,
+  drawSemiCircle(display.rotation + banana.outerArc / 2 - banana.stemOverlap,
+                 banana.stemLength, banana.outerRadius, WHITE, position.x,
                  position.y);
+  for (int i = 1; i < banana.stemDepth - 1; i++) {
+    drawSemiCircle(display.rotation + banana.outerArc / 2 - banana.stemOverlap,
+                   banana.stemLength, banana.outerRadius - i, BLACK, position.x,
+                   position.y);
+    drawSemiCircle(display.rotation + banana.outerArc / 2 - banana.stemOverlap +
+                       banana.stemLength,
+                   1, banana.outerRadius - i, WHITE, position.x, position.y);
+  }
+  drawSemiCircle(display.rotation + banana.outerArc / 2 - banana.stemOverlap,
+                 banana.stemLength, banana.outerRadius - (banana.stemDepth - 1),
+                 WHITE, position.x, position.y);
 }
 
 void startNewGame(Side side) {
@@ -196,7 +206,6 @@ void handleInputs() {
     if (arduboy.justPressed(A_BUTTON | B_BUTTON | RIGHT_BUTTON | LEFT_BUTTON |
                             DOWN_BUTTON | UP_BUTTON)) {
       resetGame();
-      game.scoreDisplayed = 0;
     }
 
     return;
@@ -504,11 +513,11 @@ void loop() {
 
   arduboy.clear();
 
+  drawBanana(banana, display, getPosition());
+
   if (display.showStats) {
     drawStats();
   }
-
-  drawBanana(banana, display, getPosition());
 
   arduboy.drawFastHLine(0, display.floorY, WIDTH);
   drawText();
