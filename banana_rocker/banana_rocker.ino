@@ -12,7 +12,10 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // * optimize variable types
 // * see about inlining math functions
 // * banana maker to find values, test difficulty
-// * animate new game title sequence
+// * animate game over sequence
+// * setGameState that toggles what gets shown
+// * title bounces away against banana?
+// * volume control
 
 const uint16_t SCORE[] PROGMEM = {NOTE_C4, 34, NOTE_E4,  34,
                                   NOTE_C5, 68, TONES_END};
@@ -40,12 +43,13 @@ struct Position {
 
 struct Animation {
   const int frameRate = 30;
+
   const float momentumDropPerFrame = .05;
   const int framesPerRock = 15;
-
-  const int titleTransitionFrames = 15;
-
   int frame = 0;
+
+  const int titleTransitionFrames = 10;
+  int titleTransitionFrame = 0;
 } animation;
 
 struct Game {
@@ -64,21 +68,23 @@ struct Game {
 // Some of these might make more sense in other structs.
 // Maybe Input or Game? See what feels weird.
 struct Display {
-  const int titleSpriteY = 3;
   const int titleSpriteWidth = 90;
   const int titleSpriteHeight = 29;
-  const int textY = 15;
+  const int gameOverTextY = 15;
   const int floorY = HEIGHT - 6;
   const int scoreY = HEIGHT - 4;
-
-  int titleSpriteYDisplayed;
 
   // TODO: bring back a nice way to toggle this, or ditch
   const bool showStats = false;
 
-  const int textStageMsMin = 1000;
-  int textStageMsStart = 0;
-  int textStageMsDisplayed = 0;
+  const int titleTransitionMsMin = 1000;
+  int titleTransitionMsStart = 0;
+  int titleTransitionMsDisplayed = 0; // TODO: getMsSince()?
+
+  const int titleSpriteYStart = -29; // titleSpriteHeight
+  const int titleSpriteYEnd = 3;
+  int titleSpriteY = -29;
+  bool isTitleActive = true;
 
   int controlledRotation = 0;
   int rotation = 0;
@@ -99,10 +105,10 @@ Banana banana;
 
 void reset() {
   animation.frame = 0;
+  animation.titleTransitionFrame = 0;
 
-  display.titleSpriteYDisplayed = -display.titleSpriteHeight;
-  display.textStageMsStart = 0;
-  display.textStageMsDisplayed = 0;
+  display.titleTransitionMsStart = 0;
+  display.titleTransitionMsDisplayed = 0;
   display.controlledRotation = 0;
   display.rotation = 0;
   display.momentum = 0;
@@ -110,6 +116,7 @@ void reset() {
   display.direction = Side::CENTER;
   display.side = Side::CENTER;
   display.weight = 1;
+  display.isTitleActive = true;
 
   game.score = 0;
   game.state = GameState::TITLE;
@@ -137,18 +144,19 @@ void startNewGame(Side side) {
   game.score = 0;
   game.state = GameState::ACTIVE;
 
+  display.isTitleActive = false;
   display.momentum = banana.initialMomentum;
   display.side = side;
 }
 
 void endGame() {
   game.state = GameState::GAME_OVER;
-  display.textStageMsStart = millis();
-  display.textStageMsDisplayed = 0;
+  display.titleTransitionMsStart = millis();
+  display.titleTransitionMsDisplayed = 0;
 }
 
 void handleInputs() {
-  if (display.textStageMsDisplayed < display.textStageMsMin) {
+  if (display.titleTransitionMsDisplayed < display.titleTransitionMsMin) {
     return;
   }
 
@@ -340,15 +348,24 @@ void drawStats() {
 }
 
 void printCenteredText(__FlashStringHelper *string, int i) {
-  tinyfont.setCursor((WIDTH - 5 * 6) / 2, display.textY + 5 * i);
+  tinyfont.setCursor((WIDTH - 5 * 6) / 2, display.gameOverTextY + 5 * i);
   tinyfont.print(string);
 }
 
+int getTitleSpriteY() {
+  int travel = display.titleSpriteYEnd - display.titleSpriteYStart;
+
+  // TODO: extract easeInSine
+  float weight = sin(1.5707963 * (float(animation.titleTransitionFrame) /
+                                  animation.titleTransitionFrames));
+
+  return display.titleSpriteYStart + (weight * travel);
+}
+
 void drawText() {
-  if (game.state == GameState::TITLE ||
-      display.titleSpriteYDisplayed > -display.titleSpriteHeight) {
+  if (display.titleSpriteY > display.titleSpriteYStart) {
     Sprites::drawSelfMasked((WIDTH - display.titleSpriteWidth) / 2,
-                            display.titleSpriteYDisplayed, title, 0);
+                            display.titleSpriteY, title, 0);
   } else if (game.state == GameState::GAME_OVER) {
     printCenteredText(F("GAME"), 0);
     printCenteredText(F("OVER"), 1);
@@ -406,28 +423,25 @@ void update() {
     game.scoreDisplayed -= 1;
   }
 
-  // TODO: faster and eased
-  // need frame counter
-  int titleTravel = display.titleSpriteHeight + display.titleSpriteY;
+  display.titleSpriteY = getTitleSpriteY();
 
-  if (game.state == GameState::TITLE) {
-    if (display.titleSpriteYDisplayed < display.titleSpriteY) {
-      display.titleSpriteYDisplayed += 1;
+  if (display.isTitleActive) {
+    if (animation.titleTransitionFrame < animation.titleTransitionFrames) {
+      animation.titleTransitionFrame += 1;
     }
-  } else {
-    if (display.titleSpriteYDisplayed > -display.titleSpriteHeight) {
-      display.titleSpriteYDisplayed -= 1;
-    }
+  } else if (animation.titleTransitionFrame > 0) {
+    animation.titleTransitionFrame -= 1;
   }
 
   if (game.state == GameState::TITLE || game.state == GameState::GAME_OVER) {
-    if (display.textStageMsDisplayed < display.textStageMsMin) {
-      if (display.textStageMsStart == 0) {
-        display.textStageMsStart = millis();
+    if (display.titleTransitionMsDisplayed < display.titleTransitionMsMin) {
+      if (display.titleTransitionMsStart == 0) {
+        display.titleTransitionMsStart = millis();
         return;
       }
 
-      display.textStageMsDisplayed = millis() - display.textStageMsStart;
+      display.titleTransitionMsDisplayed =
+          millis() - display.titleTransitionMsStart;
     }
   }
 
