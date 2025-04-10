@@ -43,6 +43,8 @@ struct Animation {
   const float momentumDropPerFrame = .05;
   const int framesPerRock = 15;
 
+  const int titleTransitionFrames = 15;
+
   int frame = 0;
 } animation;
 
@@ -64,9 +66,12 @@ struct Game {
 struct Display {
   const int titleSpriteY = 3;
   const int titleSpriteWidth = 90;
+  const int titleSpriteHeight = 29;
   const int textY = 15;
   const int floorY = HEIGHT - 6;
   const int scoreY = HEIGHT - 4;
+
+  int titleSpriteYDisplayed;
 
   // TODO: bring back a nice way to toggle this, or ditch
   const bool showStats = false;
@@ -95,6 +100,7 @@ Banana banana;
 void reset() {
   animation.frame = 0;
 
+  display.titleSpriteYDisplayed = -display.titleSpriteHeight;
   display.textStageMsStart = 0;
   display.textStageMsDisplayed = 0;
   display.controlledRotation = 0;
@@ -339,9 +345,10 @@ void printCenteredText(__FlashStringHelper *string, int i) {
 }
 
 void drawText() {
-  if (game.state == GameState::TITLE) {
+  if (game.state == GameState::TITLE ||
+      display.titleSpriteYDisplayed > -display.titleSpriteHeight) {
     Sprites::drawSelfMasked((WIDTH - display.titleSpriteWidth) / 2,
-                            display.titleSpriteY, title, 0);
+                            display.titleSpriteYDisplayed, title, 0);
   } else if (game.state == GameState::GAME_OVER) {
     printCenteredText(F("GAME"), 0);
     printCenteredText(F("OVER"), 1);
@@ -397,6 +404,20 @@ void update() {
     game.scoreDisplayed += 1;
   } else if (game.score < game.scoreDisplayed) {
     game.scoreDisplayed -= 1;
+  }
+
+  // TODO: faster and eased
+  // need frame counter
+  int titleTravel = display.titleSpriteHeight + display.titleSpriteY;
+
+  if (game.state == GameState::TITLE) {
+    if (display.titleSpriteYDisplayed < display.titleSpriteY) {
+      display.titleSpriteYDisplayed += 1;
+    }
+  } else {
+    if (display.titleSpriteYDisplayed > -display.titleSpriteHeight) {
+      display.titleSpriteYDisplayed -= 1;
+    }
   }
 
   if (game.state == GameState::TITLE || game.state == GameState::GAME_OVER) {
