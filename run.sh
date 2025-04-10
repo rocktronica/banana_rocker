@@ -11,8 +11,7 @@ stub="banana_rocker"
 ardens="/Applications/Ardens/Ardens.app/Contents/MacOS/Ardens"
 
 fbqn="arduboy:avr:arduboy"
-port="/dev/cu.usbmodem143101"
-
+port=$(arduino-cli board list | grep 'arduino' | awk '{print $1}')
 input_path="$PWD/${stub}/${stub}.ino"
 build_dir="$PWD/build/${stub}"
 build_path="${build_dir}/${stub}.ino.hex"
