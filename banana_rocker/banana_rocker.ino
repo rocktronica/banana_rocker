@@ -69,9 +69,9 @@ struct Game {
   const float minMomentumToScore = .1;
   const int scoreIncrementMax = 10;
 
-  int score = 0;
-  int scoreDisplayed = 0;
-  int scoreBest = 0;
+  unsigned int score = 0;
+  unsigned int scoreDisplayed = 0;
+  unsigned int scoreBest = 0;
   int gamesPlayed = 0;
 
   GameState state = GameState::TITLE;
@@ -377,22 +377,35 @@ void drawText() {
   }
 }
 
+inline int getTextWidth(int charCount) {
+  return charCount * 4 + (charCount - 1) * 1;
+}
+
 void drawScore() {
   int scoreBestDigits = 1;
-  if (game.scoreBest >= 100) {
+  if (game.scoreBest >= 1000000) {
+    scoreBestDigits = 7;
+  } else if (game.scoreBest >= 100000) {
+    scoreBestDigits = 6;
+  } else if (game.scoreBest >= 10000) {
+    scoreBestDigits = 5;
+  } else if (game.scoreBest >= 1000) {
+    scoreBestDigits = 4;
+  } else if (game.scoreBest >= 100) {
     scoreBestDigits = 3;
   } else if (game.scoreBest >= 10) {
     scoreBestDigits = 2;
   }
 
-  tinyfont.setCursor(5 * 0, display.scoreY);
+  tinyfont.setCursor(0, display.scoreY);
   tinyfont.print(F("SCORE"));
-  tinyfont.setCursor(5 * 5 + 1, display.scoreY);
+  tinyfont.setCursor(getTextWidth(5) + 2, display.scoreY);
   tinyfont.print(game.scoreDisplayed);
 
-  tinyfont.setCursor(WIDTH - (5 * (4 + scoreBestDigits) + 1), display.scoreY);
+  tinyfont.setCursor(WIDTH - (getTextWidth(4 + scoreBestDigits) + 1),
+                     display.scoreY);
   tinyfont.print(F("BEST"));
-  tinyfont.setCursor(WIDTH - (5 * scoreBestDigits) + 1, display.scoreY);
+  tinyfont.setCursor(WIDTH - getTextWidth(scoreBestDigits), display.scoreY);
 
   // TODO: fix brief glimpse of score when new best is made
   tinyfont.print(game.score == game.scoreBest ? game.scoreDisplayed
