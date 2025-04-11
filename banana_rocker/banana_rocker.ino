@@ -12,11 +12,9 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // * optimize variable types
 // * see about inlining math functions
 // * banana maker to find values, test difficulty
-// * animate game over sequence
 // * setGameState that toggles what gets shown
 // * title bounces away against banana?
 // * volume control
-// * credits/preface
 
 const uint16_t SCORE[] PROGMEM = {NOTE_C4, 34, NOTE_E4,  34,
                                   NOTE_C5, 68, TONES_END};
@@ -43,7 +41,7 @@ const unsigned char PROGMEM gameover[] =
 // clang-format on
 
 enum Side { CENTER, LEFT, RIGHT, UP, DOWN };
-enum GameState { TITLE, ACTIVE, TIPPING, GAME_OVER };
+enum GameState { PREFACE, TITLE, ACTIVE, TIPPING, GAME_OVER };
 
 struct Position {
   int x;
@@ -93,7 +91,7 @@ struct Display {
 
   const int titleTransitionMsMin = 1000;
   int titleTransitionMsStart = 0;
-  int titleTransitionMsDisplayed = 0; // TODO: getMsSince()?
+  int titleTransitionMsDisplayed = 0;
 
   const int titleSpriteYStart = -title[1];
   const int titleSpriteYEnd = 3;
@@ -172,6 +170,7 @@ void setup() {
   arduboy.setFrameRate(animation.frameRate);
 
   reset();
+  game.state = GameState::PREFACE;
 }
 
 void drawBanana(Banana banana, Display display, Position position) {
@@ -212,6 +211,11 @@ void handleInputs() {
     input.hold = Side::DOWN;
   } else {
     input.hold = Side::CENTER;
+  }
+
+  if (game.state == GameState::PREFACE && input.hold != Side::CENTER) {
+    hardResetGame();
+    return;
   }
 
   if (game.state == GameState::GAME_OVER && input.hold != Side::CENTER) {
@@ -470,7 +474,8 @@ void update() {
     animation.gameOverTextTransitionFrame -= 1;
   }
 
-  if (game.state == GameState::TITLE || game.state == GameState::GAME_OVER) {
+  if (game.state == GameState::PREFACE || game.state == GameState::TITLE ||
+      game.state == GameState::GAME_OVER) {
     if (display.titleTransitionMsDisplayed < display.titleTransitionMsMin) {
       if (display.titleTransitionMsStart == 0) {
         display.titleTransitionMsStart = millis();
@@ -481,7 +486,7 @@ void update() {
           millis() - display.titleTransitionMsStart;
     }
 
-    if (game.state == GameState::TITLE) {
+    if (game.state == GameState::PREFACE || game.state == GameState::TITLE) {
       return;
     }
   }
@@ -544,14 +549,27 @@ void update() {
   }
 }
 
-void loop() {
-  if (!(arduboy.nextFrame())) {
-    return;
-  }
+void drawPreface() {
+  int y = (HEIGHT - 7 * 5) / 2;
 
-  update();
-  handleInputs();
+  arduboy.clear();
 
+  tinyfont.setCursor((WIDTH - getTextWidth(7)) / 2, y + 5 * 0);
+  tinyfont.print(F("MADE BY"));
+  tinyfont.setCursor((WIDTH - getTextWidth(11)) / 2, y + 5 * 1);
+  tinyfont.print(F("ROCKTRONICA"));
+  tinyfont.setCursor((WIDTH - getTextWidth(7)) / 2, y + 5 * 3);
+  tinyfont.print(F("FOR THE"));
+  tinyfont.setCursor((WIDTH - getTextWidth(7)) / 2, y + 5 * 4);
+  tinyfont.print(F("ARDUBOY"));
+  tinyfont.setCursor((WIDTH - getTextWidth(10)) / 2, y + 5 * 5);
+  tinyfont.print(F("BANANA JAM"));
+  tinyfont.setCursor((WIDTH - getTextWidth(4)) / 2, y + 5 * 7);
+  tinyfont.print(F("2025"));
+  arduboy.display();
+}
+
+void drawGame() {
   arduboy.clear();
 
   drawBanana(banana, display, getBananaPosition());
@@ -561,4 +579,19 @@ void loop() {
   drawScore();
 
   arduboy.display();
+}
+
+void loop() {
+  if (!(arduboy.nextFrame())) {
+    return;
+  }
+
+  update();
+  handleInputs();
+
+  if (game.state == GameState::PREFACE) {
+    drawPreface();
+  } else {
+    drawGame();
+  }
 }
