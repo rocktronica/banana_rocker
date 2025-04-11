@@ -8,11 +8,10 @@ Arduboy2 arduboy;
 ArduboyTones sound(arduboy.audio.enabled);
 Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 
-// TODO:
+// TODO/EXPLORE:
 // * optimize variable types
-// * see about inlining math functions
 // * banana maker to find values, test difficulty
-// * setGameState that toggles what gets shown
+// * setGameStage that toggles what gets shown
 // * title bounces away against banana?
 // * volume control
 
@@ -41,7 +40,7 @@ const unsigned char PROGMEM gameover[] =
 // clang-format on
 
 enum Side { CENTER, LEFT, RIGHT, UP, DOWN };
-enum GameState { PREFACE, TITLE, ACTIVE, TIPPING, GAME_OVER };
+enum GameStage { PREFACE, TITLE, ACTIVE, TIPPING, GAME_OVER };
 
 struct Position {
   int x;
@@ -72,7 +71,7 @@ struct Game {
   unsigned int scoreBest = 0;
   int gamesPlayed = 0;
 
-  GameState state = GameState::TITLE;
+  GameStage stage = GameStage::TITLE;
 } game;
 
 // Some of these might make more sense in other structs.
@@ -89,7 +88,7 @@ struct Display {
 
   Position tippedPosition;
 
-  const int titleTransitionMsMin = 1000;
+  const int titleTransitionMsMin = 1500;
   int titleTransitionMsStart = 0;
   int titleTransitionMsDisplayed = 0;
 
@@ -116,51 +115,40 @@ struct Input {
 
 Banana banana;
 
-void reset() {
+// Leave banana where it is but otherwise reset
+void softReset() {
   animation.frame = 0;
   animation.titleTransitionFrame = 0;
 
   display.titleTransitionMsStart = 0;
   display.titleTransitionMsDisplayed = 0;
   display.controlledRotation = 0;
-  display.rotation = 0;
   display.momentum = 0;
   display.deviation = 0;
-  display.direction = Side::CENTER;
-  display.side = Side::CENTER;
   display.weight = 1;
   display.isTitleActive = true;
   display.isGameOverTextActive = false;
 
   game.score = 0;
-  game.state = GameState::TITLE;
+  game.stage = GameStage::TITLE;
+}
+
+// Reset, for real
+void hardReset() {
+  softReset();
+
+  display.rotation = 0;
+  display.direction = Side::CENTER;
+  display.side = Side::CENTER;
 }
 
 void hardResetGame() {
-  reset();
+  hardReset();
   game.scoreDisplayed = 0;
 }
 
-// TODO: DRY
 void softResetGame() {
-  animation.frame = 0;
-  animation.titleTransitionFrame = 0;
-
-  display.titleTransitionMsStart = 0;
-  display.titleTransitionMsDisplayed = 0;
-  display.controlledRotation = 0;
-  // display.rotation = 0;
-  display.momentum = 0;
-  display.deviation = 0;
-  // display.direction = Side::CENTER;
-  // display.side = Side::CENTER;
-  display.weight = 1;
-  display.isTitleActive = true;
-  display.isGameOverTextActive = false;
-
-  game.score = 0;
-  game.state = GameState::TITLE;
-
+  softReset();
   game.scoreDisplayed = 0;
 }
 
@@ -169,8 +157,8 @@ void setup() {
   arduboy.waitNoButtons();
   arduboy.setFrameRate(animation.frameRate);
 
-  reset();
-  game.state = GameState::PREFACE;
+  hardReset();
+  game.stage = GameStage::PREFACE;
 }
 
 void drawBanana(Banana banana, Display display, Position position) {
@@ -180,7 +168,7 @@ void drawBanana(Banana banana, Display display, Position position) {
 void startNewGame(Side side) {
   game.gamesPlayed += 1;
   game.score = 0;
-  game.state = GameState::ACTIVE;
+  game.stage = GameStage::ACTIVE;
 
   display.isTitleActive = false;
   display.momentum = banana.initialMomentum;
@@ -188,7 +176,7 @@ void startNewGame(Side side) {
 }
 
 void endGame() {
-  game.state = GameState::GAME_OVER;
+  game.stage = GameStage::GAME_OVER;
   display.titleTransitionMsStart = millis();
   display.titleTransitionMsDisplayed = 0;
   display.isGameOverTextActive = true;
@@ -213,12 +201,12 @@ void handleInputs() {
     input.hold = Side::CENTER;
   }
 
-  if (game.state == GameState::PREFACE && input.hold != Side::CENTER) {
+  if (game.stage == GameStage::PREFACE && input.hold != Side::CENTER) {
     hardResetGame();
     return;
   }
 
-  if (game.state == GameState::GAME_OVER && input.hold != Side::CENTER) {
+  if (game.stage == GameStage::GAME_OVER && input.hold != Side::CENTER) {
     softResetGame();
     return;
   }
@@ -247,7 +235,7 @@ Position getBananaPosition() {
   xy.x = WIDTH / 2 + (display.rotation / 360.0) * banana.outerRadius * 2 * M_PI;
   xy.y = display.floorY - banana.outerRadius;
 
-  if (game.state == GameState::TIPPING || game.state == GameState::GAME_OVER ||
+  if (game.stage == GameStage::TIPPING || game.stage == GameStage::GAME_OVER ||
       isGameOverToNewGameTransition()) {
     xyEnd.x = xy.x + sin(radians(display.rotation)) * banana.outerRadius +
               (display.direction == Side::RIGHT ? -banana.outerRadius
@@ -258,7 +246,7 @@ Position getBananaPosition() {
             (banana.outerRadius * (display.direction == Side::RIGHT ? -1 : 1)) +
         banana.outerRadius + 1;
 
-    if (game.state == GameState::GAME_OVER) {
+    if (game.stage == GameStage::GAME_OVER) {
       display.tippedPosition = xyEnd;
     }
 
@@ -411,13 +399,12 @@ void drawScore() {
   tinyfont.print(F("BEST"));
   tinyfont.setCursor(WIDTH - getTextWidth(scoreBestDigits), display.scoreY);
 
-  // TODO: fix brief glimpse of score when new best is made
   tinyfont.print(game.score == game.scoreBest ? game.scoreDisplayed
                                               : game.scoreBest);
 }
 
 bool isGameOverToNewGameTransition() {
-  return game.state == GameState::TITLE &&
+  return game.stage == GameStage::TITLE &&
          animation.gameOverTextTransitionFrame > 0;
 }
 
@@ -432,7 +419,7 @@ void updateRotation() {
     return;
   }
 
-  if (game.state == GameState::TIPPING || game.state == GameState::GAME_OVER) {
+  if (game.stage == GameStage::TIPPING || game.stage == GameStage::GAME_OVER) {
     display.deviation = 1 - display.deviation; // 0 to 1 -> 1 to 2
     display.rotation = display.controlledRotation +
                        display.deviation *
@@ -474,8 +461,8 @@ void update() {
     animation.gameOverTextTransitionFrame -= 1;
   }
 
-  if (game.state == GameState::PREFACE || game.state == GameState::TITLE ||
-      game.state == GameState::GAME_OVER) {
+  if (game.stage == GameStage::PREFACE || game.stage == GameStage::TITLE ||
+      game.stage == GameStage::GAME_OVER) {
     if (display.titleTransitionMsDisplayed < display.titleTransitionMsMin) {
       if (display.titleTransitionMsStart == 0) {
         display.titleTransitionMsStart = millis();
@@ -485,28 +472,30 @@ void update() {
       display.titleTransitionMsDisplayed =
           millis() - display.titleTransitionMsStart;
     }
-
-    if (game.state == GameState::PREFACE || game.state == GameState::TITLE) {
-      return;
-    }
   }
 
-  if (game.state == GameState::GAME_OVER || isGameOverToNewGameTransition()) {
+  if (game.stage == GameStage::PREFACE &&
+      display.titleTransitionMsDisplayed >= display.titleTransitionMsMin) {
+    hardReset();
+  }
+
+  if (game.stage == GameStage::PREFACE || game.stage == GameStage::TITLE ||
+      game.stage == GameStage::GAME_OVER || isGameOverToNewGameTransition()) {
     return;
   }
 
   if (abs(display.rotation) >= banana.tippingAmplitudeDegrees) {
-    if (game.state == GameState::ACTIVE) {
+    if (game.stage == GameStage::ACTIVE) {
       // No matter where we are in the current rocking swing, if
       // we're about to tip, reset current frame to give the falling
       // animation a regular half cycle to complete.
       animation.frame = ceil(animation.framesPerRock / 2.0);
     }
-    game.state = GameState::TIPPING;
+    game.stage = GameStage::TIPPING;
     display.direction = display.side;
   }
 
-  if (game.state == GameState::TIPPING) {
+  if (game.stage == GameStage::TIPPING) {
     if (animation.frame < animation.framesPerRock) {
       animation.frame += 1;
     } else {
@@ -589,7 +578,7 @@ void loop() {
   update();
   handleInputs();
 
-  if (game.state == GameState::PREFACE) {
+  if (game.stage == GameStage::PREFACE) {
     drawPreface();
   } else {
     drawGame();
