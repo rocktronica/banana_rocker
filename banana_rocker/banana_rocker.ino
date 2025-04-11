@@ -16,6 +16,7 @@ Tinyfont tinyfont = Tinyfont(arduboy.sBuffer, WIDTH, HEIGHT);
 // * setGameState that toggles what gets shown
 // * title bounces away against banana?
 // * volume control
+// * credits/preface
 
 const uint16_t SCORE[] PROGMEM = {NOTE_C4, 34, NOTE_E4,  34,
                                   NOTE_C5, 68, TONES_END};
@@ -30,6 +31,14 @@ const unsigned char PROGMEM title[] =
 0x07, 0x1f, 0x1f, 0x3f, 0x3f, 0x3d, 0xbd, 0xbf, 0xbf, 0x9f, 0x8f, 0x86, 0x00, 0x0f, 0x1f, 0x3f, 0x3f, 0x3f, 0x1f, 0x0f, 0x0f, 0x9f, 0xbf, 0xbf, 0xbf, 0x9f, 0x8f, 0x00, 0x07, 0x1f, 0x3f, 0x3f, 0x3f, 0x1f, 0x03, 0x07, 0x9f, 0x9f, 0xbf, 0xbf, 0xbf, 0x9f, 0x8f, 0x00, 0x00, 0x1f, 0x3f, 0x3f, 0xbf, 0xbf, 0x9f, 0x87, 0x1f, 0x3f, 0x3f, 0xbf, 0xbf, 0x1f, 0x00, 0x00, 0x1f, 0x3f, 0x3f, 0xbf, 0xbf, 0x8f, 0x83, 0x8f, 0x9f, 0xbf, 0xbf, 0x3f, 0x3f, 0x1f, 0x01, 0x00, 0x0f, 0x9f, 0xbf, 0xbf, 0xbf, 0x9f, 0x8f, 0x0f, 0x1f, 0x3f, 0x3f, 0x3f, 0x1f, 0x0f, 
 0x00, 0x00, 0x00, 0xf0, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xef, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00, 0x00, 0xf0, 0xfc, 0xff, 0xff, 0xff, 0xff, 0xbf, 0xbf, 0xff, 0xff, 0xff, 0xff, 0xfc, 0xf0, 0x00, 0xf8, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0x9f, 0x8f, 0x8f, 0x8f, 0x8f, 0x06, 0x00, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xfe, 0xff, 0xff, 0xdf, 0x8f, 0x00, 0x00, 0x00, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x6f, 0x0f, 0x07, 0x00, 0x00, 0xfc, 0xfe, 0xff, 0xff, 0xff, 0xef, 0xef, 0xff, 0xff, 0xff, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 
 0x00, 0x00, 0x00, 0x01, 0x0f, 0x1f, 0x1f, 0x1f, 0x1f, 0x03, 0x07, 0x0f, 0x1f, 0x1f, 0x1f, 0x0e, 0x00, 0x00, 0x03, 0x0f, 0x0f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x0f, 0x0f, 0x03, 0x00, 0x00, 0x01, 0x03, 0x0f, 0x0f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x0f, 0x07, 0x00, 0x07, 0x0f, 0x1f, 0x1f, 0x1f, 0x0f, 0x07, 0x0f, 0x1f, 0x1f, 0x1f, 0x1f, 0x0e, 0x00, 0x00, 0x07, 0x0f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1e, 0x0e, 0x00, 0x00, 0x07, 0x0f, 0x1f, 0x1f, 0x1f, 0x0f, 0x03, 0x0f, 0x1f, 0x1f, 0x1f, 0x0f, 0x00, 0x00, 0x00, 0x00,
+};
+const unsigned char PROGMEM gameover[] =
+{
+// width, height,
+19, 9,
+// FRAME 00
+0xef, 0x29, 0x29, 0xed, 0x00, 0xef, 0x05, 0x05, 0xef, 0x00, 0xef, 0x61, 0x63, 0x2f, 0x00, 0xef, 0xab, 0xab, 0xe9, 
+0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00,
 };
 // clang-format on
 
@@ -48,8 +57,11 @@ struct Animation {
   const int framesPerRock = 15;
   int frame = 0;
 
-  const int titleTransitionFrames = 10;
+  const int titleTransitionFrames = 15;
   int titleTransitionFrame = 0;
+
+  const int gameOverTextTransitionFrames = 10;
+  int gameOverTextTransitionFrame = 0;
 } animation;
 
 struct Game {
@@ -68,11 +80,16 @@ struct Game {
 // Some of these might make more sense in other structs.
 // Maybe Input or Game? See what feels weird.
 struct Display {
-  const int titleSpriteWidth = 90;
-  const int titleSpriteHeight = 29;
-  const int gameOverTextY = 15;
+  const int titleSpriteWidth = title[0];
+  const int titleSpriteHeight = title[1];
+  const int gameOverTextWidth = gameover[0];
+  const int gameOverTextY = 23;
+  const int gameOverTextStartLeft = -gameover[0];
+  const int gameOverTextStartRight = WIDTH;
   const int floorY = HEIGHT - 6;
   const int scoreY = HEIGHT - 4;
+
+  Position tippedPosition;
 
   // TODO: bring back a nice way to toggle this, or ditch
   const bool showStats = false;
@@ -81,10 +98,11 @@ struct Display {
   int titleTransitionMsStart = 0;
   int titleTransitionMsDisplayed = 0; // TODO: getMsSince()?
 
-  const int titleSpriteYStart = -29; // titleSpriteHeight
+  const int titleSpriteYStart = -title[1];
   const int titleSpriteYEnd = 3;
-  int titleSpriteY = -29;
+  int titleSpriteY = -title[1];
   bool isTitleActive = true;
+  bool isGameOverTextActive = false;
 
   int controlledRotation = 0;
   int rotation = 0;
@@ -117,13 +135,37 @@ void reset() {
   display.side = Side::CENTER;
   display.weight = 1;
   display.isTitleActive = true;
+  display.isGameOverTextActive = false;
 
   game.score = 0;
   game.state = GameState::TITLE;
 }
 
-void resetGame() {
+void hardResetGame() {
   reset();
+  game.scoreDisplayed = 0;
+}
+
+// TODO: DRY
+void softResetGame() {
+  animation.frame = 0;
+  animation.titleTransitionFrame = 0;
+
+  display.titleTransitionMsStart = 0;
+  display.titleTransitionMsDisplayed = 0;
+  display.controlledRotation = 0;
+  // display.rotation = 0;
+  display.momentum = 0;
+  display.deviation = 0;
+  // display.direction = Side::CENTER;
+  // display.side = Side::CENTER;
+  display.weight = 1;
+  display.isTitleActive = true;
+  display.isGameOverTextActive = false;
+
+  game.score = 0;
+  game.state = GameState::TITLE;
+
   game.scoreDisplayed = 0;
 }
 
@@ -153,6 +195,7 @@ void endGame() {
   game.state = GameState::GAME_OVER;
   display.titleTransitionMsStart = millis();
   display.titleTransitionMsDisplayed = 0;
+  display.isGameOverTextActive = true;
 }
 
 void handleInputs() {
@@ -175,7 +218,7 @@ void handleInputs() {
   }
 
   if (game.state == GameState::GAME_OVER && input.hold != Side::CENTER) {
-    resetGame();
+    softResetGame();
     return;
   }
 
@@ -197,21 +240,37 @@ void handleInputs() {
   }
 }
 
-Position getPosition() {
-  Position xy;
+Position getBananaPosition() {
+  Position xy, xyEnd;
 
   xy.x = WIDTH / 2 + (display.rotation / 360.0) * banana.outerRadius * 2 * M_PI;
   xy.y = display.floorY - banana.outerRadius;
 
-  if (game.state == GameState::TIPPING || game.state == GameState::GAME_OVER) {
-    xy.x += sin(radians(display.rotation)) * banana.outerRadius +
-            (display.direction == Side::RIGHT ? -banana.outerRadius
-                                              : banana.outerRadius);
-
-    xy.y +=
+  if (game.state == GameState::TIPPING || game.state == GameState::GAME_OVER ||
+      isGameOverToNewGameTransition()) {
+    xyEnd.x = xy.x + sin(radians(display.rotation)) * banana.outerRadius +
+              (display.direction == Side::RIGHT ? -banana.outerRadius
+                                                : banana.outerRadius);
+    xyEnd.y =
+        xy.y +
         cos(radians(90 - display.rotation)) *
             (banana.outerRadius * (display.direction == Side::RIGHT ? -1 : 1)) +
         banana.outerRadius + 1;
+
+    if (game.state == GameState::GAME_OVER) {
+      display.tippedPosition = xyEnd;
+    }
+
+    if (isGameOverToNewGameTransition()) {
+      float weight = easeInSine((float(animation.gameOverTextTransitionFrame) /
+                                 animation.gameOverTextTransitionFrames));
+      xy.x = WIDTH / 2 + weight * (display.tippedPosition.x - WIDTH / 2);
+      xy.y = xy.y + weight * (xyEnd.y - xy.y);
+
+      return xy;
+    }
+
+    return xyEnd;
   }
 
   if (input.hold == Side::RIGHT) {
@@ -255,9 +314,11 @@ const float getLinearDeviation(Side fromSide, Side toSide, int i, int count) {
   return 1 - abs((float(i) / count) - .5) * 2;
 }
 
+// https://github.com/nicolausYes/easing-functions
+double easeInSine(double t) { return sin(1.5707963 * t); }
+
 const float getEasedDeviation(Side fromSide, Side toSide, float i, int count) {
-  // easeInSine from https://github.com/nicolausYes/easing-functions
-  return sin(1.5707963 * getLinearDeviation(fromSide, toSide, i, count));
+  return easeInSine(getLinearDeviation(fromSide, toSide, i, count));
 }
 
 void scorePoint() {
@@ -272,7 +333,7 @@ void slowDown(float drop) {
   display.momentum = display.momentum * (1.0 - drop);
 
   if (display.momentum <= game.minMomentumToStart) {
-    resetGame();
+    hardResetGame();
   }
 }
 
@@ -347,28 +408,46 @@ void drawStats() {
   line += 1;
 }
 
-void printCenteredText(__FlashStringHelper *string, int i) {
-  tinyfont.setCursor((WIDTH - 5 * 6) / 2, display.gameOverTextY + 5 * i);
-  tinyfont.print(string);
-}
-
 int getTitleSpriteY() {
-  int travel = display.titleSpriteYEnd - display.titleSpriteYStart;
+  if (game.gamesPlayed == 0) {
+    return display.titleSpriteYEnd;
+  }
 
-  // TODO: extract easeInSine
-  float weight = sin(1.5707963 * (float(animation.titleTransitionFrame) /
-                                  animation.titleTransitionFrames));
+  int travel = display.titleSpriteYEnd - display.titleSpriteYStart;
+  float weight = easeInSine((float(animation.titleTransitionFrame) /
+                             animation.titleTransitionFrames));
 
   return display.titleSpriteYStart + (weight * travel);
+}
+
+int getGameOverTextX() {
+  int start = display.side == Side::LEFT ? display.gameOverTextStartLeft
+                                         : display.gameOverTextStartRight;
+
+  if (animation.gameOverTextTransitionFrame == 0) {
+    return start;
+  }
+
+  int destination =
+      min(WIDTH - display.gameOverTextWidth,
+          max(0, getBananaPosition().x - display.gameOverTextWidth / 2));
+  int travel = destination - start;
+  float weight = easeInSine((float(animation.gameOverTextTransitionFrame) /
+                             animation.gameOverTextTransitionFrames));
+
+  return start + weight * travel;
 }
 
 void drawText() {
   if (display.titleSpriteY > display.titleSpriteYStart) {
     Sprites::drawSelfMasked((WIDTH - display.titleSpriteWidth) / 2,
                             display.titleSpriteY, title, 0);
-  } else if (game.state == GameState::GAME_OVER) {
-    printCenteredText(F("GAME"), 0);
-    printCenteredText(F("OVER"), 1);
+  }
+
+  int gameOverTextX = getGameOverTextX();
+  if (gameOverTextX > display.gameOverTextStartLeft ||
+      gameOverTextX < display.gameOverTextStartRight) {
+    Sprites::drawSelfMasked(gameOverTextX, display.gameOverTextY, gameover, 0);
   }
 }
 
@@ -396,9 +475,21 @@ void drawScore() {
   }
 }
 
+bool isGameOverToNewGameTransition() {
+  return game.state == GameState::TITLE &&
+         animation.gameOverTextTransitionFrame > 0;
+}
+
 void updateRotation() {
   display.deviation = getEasedDeviation(
       Side::CENTER, display.side, animation.frame, animation.framesPerRock);
+
+  if (isGameOverToNewGameTransition()) {
+    display.rotation = (float(animation.gameOverTextTransitionFrame) /
+                        animation.gameOverTextTransitionFrames) *
+                       180 * (display.side == Side::LEFT ? -1 : 1);
+    return;
+  }
 
   if (game.state == GameState::TIPPING || game.state == GameState::GAME_OVER) {
     display.deviation = 1 - display.deviation; // 0 to 1 -> 1 to 2
@@ -433,6 +524,15 @@ void update() {
     animation.titleTransitionFrame -= 1;
   }
 
+  if (display.isGameOverTextActive) {
+    if (animation.gameOverTextTransitionFrame <
+        animation.gameOverTextTransitionFrames) {
+      animation.gameOverTextTransitionFrame += 1;
+    }
+  } else if (animation.gameOverTextTransitionFrame > 0) {
+    animation.gameOverTextTransitionFrame -= 1;
+  }
+
   if (game.state == GameState::TITLE || game.state == GameState::GAME_OVER) {
     if (display.titleTransitionMsDisplayed < display.titleTransitionMsMin) {
       if (display.titleTransitionMsStart == 0) {
@@ -443,9 +543,13 @@ void update() {
       display.titleTransitionMsDisplayed =
           millis() - display.titleTransitionMsStart;
     }
+
+    if (game.state == GameState::TITLE) {
+      return;
+    }
   }
 
-  if (game.state == GameState::GAME_OVER) {
+  if (game.state == GameState::GAME_OVER || isGameOverToNewGameTransition()) {
     return;
   }
 
@@ -513,7 +617,7 @@ void loop() {
 
   arduboy.clear();
 
-  drawBanana(banana, display, getPosition());
+  drawBanana(banana, display, getBananaPosition());
 
   if (display.showStats) {
     drawStats();
