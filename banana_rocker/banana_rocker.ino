@@ -91,9 +91,6 @@ struct Display {
 
   Position tippedPosition;
 
-  // TODO: bring back a nice way to toggle this, or ditch
-  const bool showStats = false;
-
   const int titleTransitionMsMin = 1000;
   int titleTransitionMsStart = 0;
   int titleTransitionMsDisplayed = 0; // TODO: getMsSince()?
@@ -337,77 +334,6 @@ void slowDown(float drop) {
   }
 }
 
-void drawStats() {
-  int line = 0;
-  int x = 10 * 5;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("GAMES:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(game.gamesPlayed);
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("FRAME:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(animation.frame);
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("SIDE:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(display.side);
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("DIRECTION:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(display.direction);
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("STATE:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(game.state);
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("ROTATION:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(display.rotation);
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("ctrlROT:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(display.controlledRotation);
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("DEVIATION:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(display.deviation);
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("MOMENTUM:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(float(display.momentum));
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("HOLD:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(input.hold);
-  line += 1;
-
-  tinyfont.setCursor(0, 5 * line);
-  tinyfont.print(F("WEIGHT:"));
-  tinyfont.setCursor(x, 5 * line);
-  tinyfont.print(display.weight);
-  line += 1;
-}
-
 int getTitleSpriteY() {
   if (game.gamesPlayed == 0) {
     return display.titleSpriteYEnd;
@@ -618,10 +544,6 @@ void loop() {
   arduboy.clear();
 
   drawBanana(banana, display, getBananaPosition());
-
-  if (display.showStats) {
-    drawStats();
-  }
 
   arduboy.drawFastHLine(0, display.floorY, WIDTH);
   drawText();
