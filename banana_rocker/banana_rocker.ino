@@ -390,15 +390,13 @@ void drawScore() {
   tinyfont.setCursor(5 * 5 + 1, display.scoreY);
   tinyfont.print(game.scoreDisplayed);
 
-  if (game.gamesPlayed > 1 || game.score < game.scoreBest) {
-    tinyfont.setCursor(WIDTH - (5 * (4 + scoreBestDigits) + 1), display.scoreY);
-    tinyfont.print(F("BEST"));
-    tinyfont.setCursor(WIDTH - (5 * scoreBestDigits) + 1, display.scoreY);
+  tinyfont.setCursor(WIDTH - (5 * (4 + scoreBestDigits) + 1), display.scoreY);
+  tinyfont.print(F("BEST"));
+  tinyfont.setCursor(WIDTH - (5 * scoreBestDigits) + 1, display.scoreY);
 
-    // TODO: fix brief glimpse of score when new best is made
-    tinyfont.print(game.score == game.scoreBest ? game.scoreDisplayed
-                                                : game.scoreBest);
-  }
+  // TODO: fix brief glimpse of score when new best is made
+  tinyfont.print(game.score == game.scoreBest ? game.scoreDisplayed
+                                              : game.scoreBest);
 }
 
 bool isGameOverToNewGameTransition() {
